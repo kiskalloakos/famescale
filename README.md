@@ -1,4 +1,4 @@
-# FAMESCALE Finance App
+# JOO
 
 A React Native finance app built with Expo.
 
