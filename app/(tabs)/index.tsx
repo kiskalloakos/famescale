@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,22 +13,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { DASHBOARD_KEY, CURRENCY_KEY } from '../../constants/storage';
-
-interface Account {
-  id: string;
-  name: string;
-  amount: string;
-}
-
-interface Cost {
-  id: string;
-  name: string;
-  amount: string;
-  paid: boolean;
-}
+import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import {
+  Account,
+  Cost,
+  getDashboard,
+  refreshDashboard,
+  saveAccount as persistAccount,
+  deleteAccount as removeAccount,
+  saveCost as persistCost,
+  deleteCost as removeCost,
+  newId,
+} from '../../lib/dashboard';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -66,28 +63,31 @@ export default function Dashboard() {
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
 
-  useEffect(() => {
-    AsyncStorage.getItem(DASHBOARD_KEY).then((data) => {
-      if (data) {
-        const p = JSON.parse(data);
-        setAccounts(p.accounts ?? []);
-        setCosts(p.costs ?? []);
-      }
-    });
-  }, []);
-
-  // Re-read currency whenever this tab comes into focus
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.getItem(CURRENCY_KEY).then((val) => {
-        if (val) setCurrency(val);
+      let cancelled = false;
+      // Cache first (instant), then remote refresh.
+      getDashboard().then((d) => {
+        if (cancelled) return;
+        setAccounts(d.accounts);
+        setCosts(d.costs);
       });
+      refreshDashboard().then((d) => {
+        if (cancelled) return;
+        setAccounts(d.accounts);
+        setCosts(d.costs);
+      });
+      getCurrencyForPage('dashboard').then((c) => {
+        if (!cancelled) setCurrency(c);
+      });
+      refreshCurrencyForPage('dashboard').then((c) => {
+        if (!cancelled) setCurrency(c);
+      });
+      return () => {
+        cancelled = true;
+      };
     }, []),
   );
-
-  const persist = useCallback((a: Account[], c: Cost[]) => {
-    AsyncStorage.setItem(DASHBOARD_KEY, JSON.stringify({ accounts: a, costs: c }));
-  }, []);
 
   const totalLiquid = accounts.reduce((s, a) => s + parseAmt(a.amount), 0);
   const totalCosts = costs.reduce((s, c) => s + parseAmt(c.amount), 0);
@@ -107,18 +107,22 @@ export default function Dashboard() {
     setAccountModal({ visible: true, editing: account });
   };
 
-  const saveAccount = () => {
+  const saveAccount = async () => {
     if (!formName.trim()) return;
-    const updated: Account[] = accountModal.editing
-      ? accounts.map((a) =>
-          a.id === accountModal.editing!.id
-            ? { ...a, name: formName.trim(), amount: formAmount }
-            : a,
-        )
-      : [...accounts, { id: Date.now().toString(), name: formName.trim(), amount: formAmount }];
-    setAccounts(updated);
-    persist(updated, costs);
+    const editing = accountModal.editing;
+    const account: Account = editing
+      ? { ...editing, name: formName.trim(), amount: formAmount }
+      : {
+          id: newId(),
+          name: formName.trim(),
+          amount: formAmount,
+          position: accounts.length,
+        };
+    setAccounts(
+      editing ? accounts.map((a) => (a.id === editing.id ? account : a)) : [...accounts, account],
+    );
     setAccountModal({ visible: false, editing: null });
+    await persistAccount(account);
   };
 
   const deleteAccount = (id: string) => {
@@ -127,10 +131,9 @@ export default function Dashboard() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => {
-          const updated = accounts.filter((a) => a.id !== id);
-          setAccounts(updated);
-          persist(updated, costs);
+        onPress: async () => {
+          setAccounts(accounts.filter((a) => a.id !== id));
+          await removeAccount(id);
         },
       },
     ]);
@@ -149,27 +152,31 @@ export default function Dashboard() {
     setCostModal({ visible: true, editing: cost });
   };
 
-  const saveCost = () => {
+  const saveCost = async () => {
     if (!formName.trim()) return;
-    const updated: Cost[] = costModal.editing
-      ? costs.map((c) =>
-          c.id === costModal.editing!.id
-            ? { ...c, name: formName.trim(), amount: formAmount }
-            : c,
-        )
-      : [
-          ...costs,
-          { id: Date.now().toString(), name: formName.trim(), amount: formAmount, paid: false },
-        ];
-    setCosts(updated);
-    persist(accounts, updated);
+    const editing = costModal.editing;
+    const cost: Cost = editing
+      ? { ...editing, name: formName.trim(), amount: formAmount }
+      : {
+          id: newId(),
+          name: formName.trim(),
+          amount: formAmount,
+          paid: false,
+          position: costs.length,
+        };
+    setCosts(
+      editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost],
+    );
     setCostModal({ visible: false, editing: null });
+    await persistCost(cost);
   };
 
-  const togglePaid = (id: string) => {
-    const updated = costs.map((c) => (c.id === id ? { ...c, paid: !c.paid } : c));
-    setCosts(updated);
-    persist(accounts, updated);
+  const togglePaid = async (id: string) => {
+    const target = costs.find((c) => c.id === id);
+    if (!target) return;
+    const updated: Cost = { ...target, paid: !target.paid };
+    setCosts(costs.map((c) => (c.id === id ? updated : c)));
+    await persistCost(updated);
   };
 
   const deleteCost = (id: string) => {
@@ -178,10 +185,9 @@ export default function Dashboard() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => {
-          const updated = costs.filter((c) => c.id !== id);
-          setCosts(updated);
-          persist(accounts, updated);
+        onPress: async () => {
+          setCosts(costs.filter((c) => c.id !== id));
+          await removeCost(id);
         },
       },
     ]);

@@ -5,25 +5,24 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
-  TextInput,
   StyleSheet,
   Alert,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { CURRENCY_KEY } from '../../constants/storage';
-import { SETUP_KEY, SetupData } from '../../components/OnboardingFlow';
+import { SetupData, getSetup, refreshSetup } from '../../lib/setup';
 import {
-  RevenueState,
-  RevenueEntry,
-  getRevenue,
-  saveRevenue,
-  sortEntries,
-} from '../../lib/revenue';
+  PageKey,
+  getCurrencySettings,
+  refreshCurrencySettings,
+  saveGlobalCurrency,
+  saveOverrideCurrency,
+} from '../../lib/currency';
+import { remove as removeStored } from '../../lib/storage';
+import { supabase } from '../../lib/supabase';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei', name: 'Romanian Leu' },
@@ -38,120 +37,73 @@ function reloadPage() {
   if (Platform.OS === 'web') (window as any).location.reload();
 }
 
-function fmt(value: number, symbol: string): string {
-  return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
-
 export default function Settings() {
   const [currency, setCurrency] = useState('RON');
+  const [overrides, setOverrides] = useState<Partial<Record<PageKey, string>>>({});
   const [setup, setSetup] = useState<SetupData | null>(null);
-  const [revenue, setRevenueState] = useState<RevenueState | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
 
   const [currencyModal, setCurrencyModal] = useState(false);
-  const [entryModal, setEntryModal] = useState<{ visible: boolean; editing: RevenueEntry | null }>({
+  const [perPageModal, setPerPageModal] = useState(false);
+  const [pagePicker, setPagePicker] = useState<{ visible: boolean; page: PageKey | null }>({
     visible: false,
-    editing: null,
+    page: null,
   });
-  const [formLabel, setFormLabel] = useState('');
-  const [formAmount, setFormAmount] = useState('');
-  const [formCurrent, setFormCurrent] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.getItem(CURRENCY_KEY).then((val) => {
-        if (val) setCurrency(val);
+      let cancelled = false;
+      getCurrencySettings().then((s) => {
+        if (cancelled) return;
+        setCurrency(s.global);
+        setOverrides(s.overrides);
       });
-      AsyncStorage.getItem(SETUP_KEY).then((val) => {
-        if (val) setSetup(JSON.parse(val));
+      getSetup().then((v) => {
+        if (!cancelled && v) setSetup(v);
       });
-      getRevenue().then(setRevenueState);
+      supabase.auth.getUser().then(({ data }) => {
+        if (!cancelled) setEmail(data.user?.email ?? null);
+      });
+      refreshCurrencySettings().then((s) => {
+        if (cancelled) return;
+        setCurrency(s.global);
+        setOverrides(s.overrides);
+      });
+      refreshSetup().then((v) => {
+        if (!cancelled && v) setSetup(v);
+      });
+      return () => {
+        cancelled = true;
+      };
     }, []),
   );
+
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      Alert.alert('Sign-out failed', error.message);
+    }
+    // On success, RootLayout's auth listener routes to AuthScreen.
+  };
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency;
 
   const changeCurrency = async (code: string) => {
     setCurrency(code);
-    await AsyncStorage.setItem(CURRENCY_KEY, code);
+    await saveGlobalCurrency(code);
     setCurrencyModal(false);
   };
 
-  // ── Revenue entry CRUD ──────────────────────────────────────────────────
-  const openAddEntry = () => {
-    setFormLabel('');
-    setFormAmount('');
-    setFormCurrent(false);
-    setEntryModal({ visible: true, editing: null });
-  };
-
-  const openEditEntry = (entry: RevenueEntry) => {
-    setFormLabel(entry.label);
-    setFormAmount(String(entry.amount));
-    setFormCurrent(revenue?.currentYearLabel === entry.label);
-    setEntryModal({ visible: true, editing: entry });
-  };
-
-  const saveEntry = async () => {
-    if (!revenue || !formLabel.trim()) return;
-    const label = formLabel.trim();
-    const amount = parseFloat(formAmount) || 0;
-    const wasEditing = entryModal.editing;
-    const oldLabel = wasEditing?.label;
-
-    let entries: RevenueEntry[];
-    if (wasEditing) {
-      entries = revenue.entries.map((e) => {
-        if (e.label !== oldLabel) return e;
-        // Preserve monthly breakdown if the amount is unchanged (just a rename).
-        // Otherwise this is a lump-sum override — drop the monthly data.
-        if (e.amount === amount && e.months) return { ...e, label };
-        return { label, amount };
-      });
+  const changeOverride = async (page: PageKey, code: string | null) => {
+    if (code === null) {
+      const next = { ...overrides };
+      delete next[page];
+      setOverrides(next);
     } else {
-      if (revenue.entries.some((e) => e.label === label)) {
-        Alert.alert('Year already exists', `An entry for "${label}" already exists. Tap it to edit.`);
-        return;
-      }
-      entries = [...revenue.entries, { label, amount }];
+      setOverrides({ ...overrides, [page]: code });
     }
-
-    let currentYearLabel = revenue.currentYearLabel;
-    if (formCurrent) currentYearLabel = label;
-    else if (wasEditing && oldLabel === currentYearLabel && oldLabel !== label) {
-      // user renamed the current entry → follow the rename
-      currentYearLabel = label;
-    }
-
-    const updated: RevenueState = { currentYearLabel, entries };
-    setRevenueState(updated);
-    await saveRevenue(updated);
-    setEntryModal({ visible: false, editing: null });
-  };
-
-  const deleteEntry = (entry: RevenueEntry) => {
-    if (!revenue) return;
-    if (revenue.entries.length === 1) {
-      Alert.alert('Cannot delete', 'You need at least one revenue entry.');
-      return;
-    }
-    Alert.alert('Delete entry', `Remove revenue for "${entry.label}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          const entries = revenue.entries.filter((e) => e.label !== entry.label);
-          let currentYearLabel = revenue.currentYearLabel;
-          if (entry.label === currentYearLabel) {
-            // pick the latest remaining as new current
-            currentYearLabel = sortEntries(entries)[0]?.label ?? String(new Date().getFullYear());
-          }
-          const updated: RevenueState = { currentYearLabel, entries };
-          setRevenueState(updated);
-          await saveRevenue(updated);
-        },
-      },
-    ]);
+    await saveOverrideCurrency(page, code);
+    setPagePicker({ visible: false, page: null });
   };
 
   // ── Dev actions ─────────────────────────────────────────────────────────
@@ -162,7 +114,7 @@ export default function Settings() {
         text: 'Reset',
         style: 'destructive',
         onPress: async () => {
-          await AsyncStorage.removeItem(SETUP_KEY);
+          await removeStored('setup');
           reloadPage();
         },
       },
@@ -184,7 +136,6 @@ export default function Settings() {
   };
 
   const selectedCurrency = CURRENCIES.find((c) => c.code === currency);
-  const sortedRevenue = revenue ? sortEntries(revenue.entries) : [];
 
   return (
     <SafeAreaView style={s.container}>
@@ -199,8 +150,12 @@ export default function Settings() {
           <View style={s.avatar}>
             <Ionicons name="person" size={32} color="#00C896" />
           </View>
-          <Text style={s.profileName}>Your Profile</Text>
+          <Text style={s.profileName}>{email ?? 'Your Profile'}</Text>
           <Text style={s.profileSub}>joo · personal finance</Text>
+          <TouchableOpacity style={s.signOutBtn} onPress={signOut}>
+            <Ionicons name="log-out-outline" size={14} color="#FF6B6B" />
+            <Text style={s.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Preferences */}
@@ -216,49 +171,17 @@ export default function Settings() {
               <Ionicons name="chevron-forward" size={14} color="#333" style={{ marginLeft: 6 }} />
             </View>
           </TouchableOpacity>
+          <TouchableOpacity style={[s.row, s.subtleRow]} onPress={() => setPerPageModal(true)}>
+            <View style={s.rowIcon} />
+            <Text style={s.subtleLabel}>Customize per page</Text>
+            {Object.keys(overrides).length > 0 && (
+              <Text style={s.overrideBadge}>
+                {Object.keys(overrides).length} override{Object.keys(overrides).length === 1 ? '' : 's'}
+              </Text>
+            )}
+            <Ionicons name="chevron-forward" size={13} color="#2A2A2A" style={{ marginLeft: 6 }} />
+          </TouchableOpacity>
         </View>
-
-        {/* Revenue History — only when revenue tracking is on */}
-        {setup?.showRevenue && revenue && (
-          <>
-            <Text style={s.sectionLabel}>REVENUE HISTORY</Text>
-            <View style={s.card}>
-              {sortedRevenue.map((entry, i) => {
-                const isCurrent = entry.label === revenue.currentYearLabel;
-                return (
-                  <TouchableOpacity
-                    key={entry.label}
-                    style={[s.row, i > 0 && { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
-                    onPress={() => openEditEntry(entry)}
-                    onLongPress={() => deleteEntry(entry)}
-                  >
-                    <View style={s.rowIcon}>
-                      <Ionicons
-                        name={isCurrent ? 'radio-button-on' : 'calendar-outline'}
-                        size={16}
-                        color={isCurrent ? '#00C896' : '#555'}
-                      />
-                    </View>
-                    <Text style={[s.rowLabel, isCurrent && { color: '#00C896', fontWeight: '600' }]}>
-                      {entry.label}
-                      {isCurrent && <Text style={s.currentTag}>  · current</Text>}
-                    </Text>
-                    <Text style={s.rowValue}>{fmt(entry.amount, symbol + ' ')}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                style={[s.row, s.addRow]}
-                onPress={openAddEntry}
-              >
-                <View style={s.rowIcon}>
-                  <Ionicons name="add-circle-outline" size={16} color="#00C896" />
-                </View>
-                <Text style={[s.rowLabel, { color: '#00C896' }]}>Add Year</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
 
         {/* About */}
         <Text style={s.sectionLabel}>ABOUT</Text>
@@ -330,61 +253,114 @@ export default function Settings() {
         </View>
       </Modal>
 
-      {/* Revenue entry modal */}
-      <Modal visible={entryModal.visible} transparent animationType="slide">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={s.overlay}>
-            <View style={s.sheet}>
-              <Text style={s.sheetTitle}>
-                {entryModal.editing ? 'Edit Revenue Entry' : 'Add Revenue Year'}
-              </Text>
-              <Text style={s.inputLabel}>Year or period</Text>
-              <TextInput
-                style={s.input}
-                value={formLabel}
-                onChangeText={setFormLabel}
-                placeholder="e.g. 2025 or 2020-2022"
-                placeholderTextColor="#444"
-                autoFocus
-              />
-              <Text style={s.inputLabel}>Total revenue ({currency})</Text>
-              <TextInput
-                style={s.input}
-                value={formAmount}
-                onChangeText={setFormAmount}
-                placeholder="0"
-                placeholderTextColor="#444"
-                keyboardType="decimal-pad"
-              />
+      {/* Per-page currency modal */}
+      <Modal visible={perPageModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>Currency per page</Text>
+            <Text style={s.sheetSub}>
+              Pick a different currency for any page. Default is the global currency.
+            </Text>
 
-              <TouchableOpacity
-                style={s.toggleRow}
-                onPress={() => setFormCurrent(!formCurrent)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={formCurrent ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={22}
-                  color={formCurrent ? '#00C896' : '#3A3A3A'}
-                />
-                <Text style={s.toggleText}>Set as current year</Text>
-              </TouchableOpacity>
+            {(() => {
+              const pages: { key: PageKey; label: string }[] = [
+                { key: 'dashboard', label: 'Dashboard' },
+                { key: 'investments', label: setup?.investmentTabName ?? 'Investments' },
+              ];
+              if (setup?.showRevenue !== false) {
+                pages.push({ key: 'revenue', label: 'Revenue' });
+              }
+              return pages.map((p, i) => {
+                const override = overrides[p.key];
+                const effective = override ?? currency;
+                const symbolFor = CURRENCIES.find((c) => c.code === effective)?.symbol ?? effective;
+                return (
+                  <TouchableOpacity
+                    key={p.key}
+                    style={[s.pageRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#222' }]}
+                    onPress={() => setPagePicker({ visible: true, page: p.key })}
+                  >
+                    <Text style={s.pageRowLabel}>{p.label}</Text>
+                    <View style={s.pageRowRight}>
+                      <Text style={[s.pageRowValue, override ? s.pageRowOverride : null]}>
+                        {symbolFor} {effective}
+                      </Text>
+                      <Text style={s.pageRowHint}>
+                        {override ? 'override' : 'global'}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={14} color="#333" />
+                    </View>
+                  </TouchableOpacity>
+                );
+              });
+            })()}
 
-              <View style={s.sheetActions}>
-                <TouchableOpacity
-                  style={s.btnCancel}
-                  onPress={() => setEntryModal({ visible: false, editing: null })}
-                >
-                  <Text style={s.btnCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.btnSave} onPress={saveEntry}>
-                  <Text style={s.btnSaveText}>Save</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            <TouchableOpacity style={[s.closeBtn, { marginTop: 16 }]} onPress={() => setPerPageModal(false)}>
+              <Text style={s.closeBtnText}>Done</Text>
+            </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
+
+      {/* Page-specific currency picker (with "Use global" option) */}
+      <Modal visible={pagePicker.visible} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>
+              {pagePicker.page
+                ? `Currency · ${
+                    pagePicker.page === 'investments'
+                      ? setup?.investmentTabName ?? 'Investments'
+                      : pagePicker.page.charAt(0).toUpperCase() + pagePicker.page.slice(1)
+                  }`
+                : 'Currency'}
+            </Text>
+
+            {/* Use global option */}
+            <TouchableOpacity
+              style={[s.currencyRow, !pagePicker.page || !overrides[pagePicker.page] ? s.currencyRowActive : null]}
+              onPress={() => pagePicker.page && changeOverride(pagePicker.page, null)}
+            >
+              <Ionicons name="globe-outline" size={20} color="#888" style={{ width: 28, textAlign: 'center' }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.currencyCode}>Use global</Text>
+                <Text style={s.currencyName}>Currently {currency}</Text>
+              </View>
+              {pagePicker.page && !overrides[pagePicker.page] && (
+                <Ionicons name="checkmark-circle" size={20} color="#00C896" />
+              )}
+            </TouchableOpacity>
+
+            <View style={s.divider} />
+
+            {CURRENCIES.map((c) => {
+              const isSelected = pagePicker.page && overrides[pagePicker.page] === c.code;
+              return (
+                <TouchableOpacity
+                  key={c.code}
+                  style={[s.currencyRow, isSelected && s.currencyRowActive]}
+                  onPress={() => pagePicker.page && changeOverride(pagePicker.page, c.code)}
+                >
+                  <Text style={s.currencySymbol}>{c.symbol}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.currencyCode}>{c.code}</Text>
+                    <Text style={s.currencyName}>{c.name}</Text>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={20} color="#00C896" />}
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={[s.closeBtn, { marginTop: 12 }]}
+              onPress={() => setPagePicker({ visible: false, page: null })}
+            >
+              <Text style={s.closeBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -415,8 +391,20 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
-  profileName: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 4 },
-  profileSub: { fontSize: 12, color: '#444' },
+  profileName: { fontSize: 16, fontWeight: '600', color: '#FFF', marginBottom: 4 },
+  profileSub: { fontSize: 12, color: '#444', marginBottom: 16 },
+  signOutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#3A1818',
+    backgroundColor: '#1F0D0D',
+  },
+  signOutText: { fontSize: 12, color: '#FF6B6B', fontWeight: '600' },
 
   sectionLabel: {
     fontSize: 10,
@@ -451,6 +439,40 @@ const s = StyleSheet.create({
   warnText: { color: '#F59E0B' },
   dangerText: { color: '#FF4C4C' },
 
+  // Subtle "Customize per page" row inside the currency card
+  subtleRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#1C1C1C',
+    paddingVertical: 11,
+  },
+  subtleLabel: { flex: 1, fontSize: 12, color: '#555', fontWeight: '400' },
+  overrideBadge: {
+    fontSize: 10,
+    color: '#00C896',
+    fontWeight: '600',
+    backgroundColor: '#0D1F1A',
+    borderWidth: 1,
+    borderColor: '#1A3A2F',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    letterSpacing: 0.3,
+  },
+
+  // Per-page picker rows
+  pageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  pageRowLabel: { flex: 1, fontSize: 15, color: '#EEE', fontWeight: '500' },
+  pageRowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pageRowValue: { fontSize: 14, color: '#888', fontWeight: '500' },
+  pageRowOverride: { color: '#00C896' },
+  pageRowHint: { fontSize: 10, color: '#444', letterSpacing: 0.5 },
+  divider: { height: 1, backgroundColor: '#222', marginVertical: 8 },
+
   // Sheets
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
   sheet: {
@@ -463,7 +485,8 @@ const s = StyleSheet.create({
     borderBottomWidth: 0,
     borderColor: '#2C2C2C',
   },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 20 },
+  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 10 },
+  sheetSub: { fontSize: 13, color: '#555', marginBottom: 18, lineHeight: 18 },
   inputLabel: {
     fontSize: 11,
     fontWeight: '600',

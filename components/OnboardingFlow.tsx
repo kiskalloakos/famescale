@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { saveSetup } from '../lib/setup';
 
-export const SETUP_KEY = '@famescale_setup';
-
-export interface SetupData {
-  completed: boolean;
-  investmentTabName: 'Investments' | 'Savings';
-  showRevenue: boolean;
-}
+// Re-exported for screens that still import { SetupData } from this file.
+export type { SetupData } from '../lib/setup';
 
 interface Props {
   onComplete: () => void;
@@ -23,10 +18,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
   const [tabChoice, setTabChoice] = useState<TabChoice>('Investments');
 
   const finish = async (showRevenue: boolean) => {
-    await AsyncStorage.setItem(
-      SETUP_KEY,
-      JSON.stringify({ completed: true, investmentTabName: tabChoice, showRevenue }),
-    );
+    await saveSetup({ completed: true, investmentTabName: tabChoice, showRevenue });
     onComplete();
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,18 +9,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { INVESTMENTS_KEY, CURRENCY_KEY } from '../../constants/storage';
-
-const STORAGE_KEY = INVESTMENTS_KEY;
-
-interface InvestmentData {
-  totalInvested: string;
-  startMonth: string;
-  startYear: string;
-  annualReturn: string;
-}
+import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import {
+  InvestmentData,
+  getInvestments,
+  refreshInvestments,
+  saveInvestments,
+} from '../../lib/investments';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -64,22 +60,29 @@ export default function Investments() {
   const [configExpanded, setConfigExpanded] = useState(false);
   const [yearlyExpanded, setYearlyExpanded] = useState(false);
 
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((data) => {
-      if (data) setData(JSON.parse(data));
-    });
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.getItem(CURRENCY_KEY).then((val) => {
-        if (val) setCurrency(val);
+      let cancelled = false;
+      getInvestments().then((d) => {
+        if (!cancelled) setData(d);
       });
+      refreshInvestments().then((d) => {
+        if (!cancelled) setData(d);
+      });
+      getCurrencyForPage('investments').then((c) => {
+        if (!cancelled) setCurrency(c);
+      });
+      refreshCurrencyForPage('investments').then((c) => {
+        if (!cancelled) setCurrency(c);
+      });
+      return () => {
+        cancelled = true;
+      };
     }, []),
   );
 
   const persist = useCallback((d: InvestmentData) => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+    saveInvestments(d);
   }, []);
 
   const update = (field: keyof InvestmentData, value: string) => {

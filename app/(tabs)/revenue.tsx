@@ -9,20 +9,24 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { CURRENCY_KEY } from '../../constants/storage';
+import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import {
   RevenueState,
+  RevenueEntry,
   getRevenue,
+  refreshRevenue,
   saveRevenue,
+  sortEntries,
   allTimeTotal,
   previousEntry,
   activeMonthCount,
 } from '../../lib/revenue';
+import { newId } from '../../lib/dashboard';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -45,12 +49,33 @@ export default function Revenue() {
   const [editVisible, setEditVisible] = useState(false);
   const [monthInputs, setMonthInputs] = useState<string[]>(Array(12).fill(''));
 
+  // Past-year entry modal (add/edit a year)
+  const [entryModal, setEntryModal] = useState<{ visible: boolean; editing: RevenueEntry | null }>({
+    visible: false,
+    editing: null,
+  });
+  const [formLabel, setFormLabel] = useState('');
+  const [formAmount, setFormAmount] = useState('');
+  const [formCurrent, setFormCurrent] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
-      getRevenue().then(setState);
-      AsyncStorage.getItem(CURRENCY_KEY).then((val) => {
-        if (val) setCurrency(val);
+      let cancelled = false;
+      getRevenue().then((v) => {
+        if (!cancelled) setState(v);
       });
+      refreshRevenue().then((v) => {
+        if (!cancelled) setState(v);
+      });
+      getCurrencyForPage('revenue').then((c) => {
+        if (!cancelled) setCurrency(c);
+      });
+      refreshCurrencyForPage('revenue').then((c) => {
+        if (!cancelled) setCurrency(c);
+      });
+      return () => {
+        cancelled = true;
+      };
     }, []),
   );
 
@@ -118,6 +143,82 @@ export default function Revenue() {
     await saveRevenue(updated);
     setEditVisible(false);
   };
+
+  // ── Past-year CRUD ───────────────────────────────────────────────────────
+  const openAddEntry = () => {
+    setFormLabel('');
+    setFormAmount('');
+    setFormCurrent(false);
+    setEntryModal({ visible: true, editing: null });
+  };
+
+  const openEditEntry = (entry: RevenueEntry) => {
+    setFormLabel(entry.label);
+    setFormAmount(String(entry.amount));
+    setFormCurrent(state.currentYearLabel === entry.label);
+    setEntryModal({ visible: true, editing: entry });
+  };
+
+  const saveEntry = async () => {
+    if (!formLabel.trim()) return;
+    const label = formLabel.trim();
+    const amount = parseFloat(formAmount) || 0;
+    const wasEditing = entryModal.editing;
+    const oldLabel = wasEditing?.label;
+
+    let entries: RevenueEntry[];
+    if (wasEditing) {
+      entries = state.entries.map((e) => {
+        if (e.label !== oldLabel) return e;
+        // Preserve months only if amount is unchanged (rename); else lump-sum override.
+        if (e.amount === amount && e.months) return { ...e, label };
+        return { ...e, label, amount, months: undefined };
+      });
+    } else {
+      if (state.entries.some((e) => e.label === label)) {
+        Alert.alert('Year already exists', `An entry for "${label}" already exists. Tap it to edit.`);
+        return;
+      }
+      entries = [...state.entries, { id: newId(), label, amount }];
+    }
+
+    let currentYearLabel = state.currentYearLabel;
+    if (formCurrent) currentYearLabel = label;
+    else if (wasEditing && oldLabel === currentYearLabel && oldLabel !== label) {
+      currentYearLabel = label;
+    }
+
+    const updated: RevenueState = { currentYearLabel, entries };
+    setState(updated);
+    await saveRevenue(updated);
+    setEntryModal({ visible: false, editing: null });
+  };
+
+  const deleteEntry = (entry: RevenueEntry) => {
+    if (state.entries.length === 1) {
+      Alert.alert('Cannot delete', 'You need at least one revenue entry.');
+      return;
+    }
+    Alert.alert('Delete entry', `Remove revenue for "${entry.label}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const entries = state.entries.filter((e) => e.label !== entry.label);
+          let currentYearLabel = state.currentYearLabel;
+          if (entry.label === currentYearLabel) {
+            currentYearLabel = sortEntries(entries)[0]?.label ?? String(new Date().getFullYear());
+          }
+          const updated: RevenueState = { currentYearLabel, entries };
+          setState(updated);
+          await saveRevenue(updated);
+        },
+      },
+    ]);
+  };
+
+  const sortedEntries = sortEntries(state.entries);
 
   return (
     <SafeAreaView style={s.container}>
@@ -203,9 +304,39 @@ export default function Revenue() {
           </View>
         )}
 
-        <Text style={s.footnote}>
-          Past years are kept in your Profile under Revenue History.
-        </Text>
+        {/* Revenue History */}
+        <View style={s.historyCard}>
+          <View style={s.historyHeader}>
+            <Text style={s.historyTitle}>Revenue History</Text>
+            <TouchableOpacity style={s.historyAddBtn} onPress={openAddEntry}>
+              <Ionicons name="add" size={16} color="#00C896" />
+            </TouchableOpacity>
+          </View>
+          {sortedEntries.map((entry, i) => {
+            const isCurrent = entry.label === state.currentYearLabel;
+            return (
+              <TouchableOpacity
+                key={entry.id}
+                style={[s.historyRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
+                onPress={() => openEditEntry(entry)}
+                onLongPress={() => deleteEntry(entry)}
+              >
+                <View style={s.historyDot}>
+                  <Ionicons
+                    name={isCurrent ? 'radio-button-on' : 'ellipse-outline'}
+                    size={14}
+                    color={isCurrent ? '#00C896' : '#333'}
+                  />
+                </View>
+                <Text style={[s.historyLabel, isCurrent && s.historyLabelActive]}>
+                  {entry.label}
+                  {isCurrent && <Text style={s.historyCurrentTag}>  · current</Text>}
+                </Text>
+                <Text style={s.historyAmount}>{fmt(entry.amount, symbol)}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -252,6 +383,65 @@ export default function Revenue() {
                   <Text style={s.btnCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={s.btnSave} onPress={saveEdit}>
+                  <Text style={s.btnSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Past-year entry modal (add or edit a year) */}
+      <Modal visible={entryModal.visible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={s.overlay}>
+            <View style={s.sheet}>
+              <Text style={s.sheetTitle}>
+                {entryModal.editing ? 'Edit Revenue Year' : 'Add Revenue Year'}
+              </Text>
+              <Text style={s.inputLabel}>Year or period</Text>
+              <TextInput
+                style={s.input}
+                value={formLabel}
+                onChangeText={setFormLabel}
+                placeholder="e.g. 2024 or 2020-2022"
+                placeholderTextColor="#444"
+                autoFocus
+              />
+              <Text style={s.inputLabel}>Total revenue ({currency})</Text>
+              <TextInput
+                style={s.input}
+                value={formAmount}
+                onChangeText={setFormAmount}
+                placeholder="0"
+                placeholderTextColor="#444"
+                keyboardType="decimal-pad"
+              />
+
+              <TouchableOpacity
+                style={s.toggleRow}
+                onPress={() => setFormCurrent(!formCurrent)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={formCurrent ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={22}
+                  color={formCurrent ? '#00C896' : '#3A3A3A'}
+                />
+                <Text style={s.toggleText}>Set as current year</Text>
+              </TouchableOpacity>
+
+              <View style={s.sheetActions}>
+                <TouchableOpacity
+                  style={s.btnCancel}
+                  onPress={() => setEntryModal({ visible: false, editing: null })}
+                >
+                  <Text style={s.btnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.btnSave} onPress={saveEntry}>
                   <Text style={s.btnSaveText}>Save</Text>
                 </TouchableOpacity>
               </View>
@@ -333,6 +523,75 @@ const s = StyleSheet.create({
   breakdownEmpty: { color: '#2A2A2A', fontWeight: '400' },
 
   footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 8, lineHeight: 18 },
+
+  // Revenue history card
+  historyCard: {
+    backgroundColor: '#151515',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#222',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  historyTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
+  historyAddBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#0D0D0D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    gap: 10,
+  },
+  historyDot: { width: 18, alignItems: 'center' },
+  historyLabel: { flex: 1, fontSize: 14, color: '#CCC', fontWeight: '500' },
+  historyLabelActive: { color: '#00C896', fontWeight: '600' },
+  historyCurrentTag: { fontSize: 11, color: '#3A6A5A', fontWeight: '400' },
+  historyAmount: { fontSize: 14, color: '#888' },
+
+  // Entry modal extras
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#222',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#FFF',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  toggleText: { fontSize: 14, color: '#CCC' },
 
   // Modal
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },

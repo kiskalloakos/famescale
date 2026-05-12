@@ -1,8 +1,13 @@
-import { registerRootComponent } from 'expo';
+// Hermes (React Native's JS engine) doesn't expose `document` or `location`.
+// Metro's HMR client touches both at module load, which throws ReferenceError
+// in development on native. Defining minimal stubs here, before importing the
+// real entry, keeps the HMR runtime happy without affecting app behavior.
+const g = globalThis as any;
+if (typeof g.document === 'undefined') {
+  g.document = undefined;
+}
+if (typeof g.location === 'undefined') {
+  g.location = { href: 'http://localhost:8081/' };
+}
 
-import App from './App';
-
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
-registerRootComponent(App);
+require('expo-router/entry');

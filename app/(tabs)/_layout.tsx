@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SETUP_KEY, SetupData } from '../../components/OnboardingFlow';
+import { SetupData, getSetup, refreshSetup } from '../../lib/setup';
 
 export default function TabLayout() {
   const [setup, setSetup] = useState<SetupData>({
@@ -12,9 +11,16 @@ export default function TabLayout() {
   });
 
   useEffect(() => {
-    AsyncStorage.getItem(SETUP_KEY).then((data) => {
-      if (data) setSetup(JSON.parse(data));
+    let cancelled = false;
+    getSetup().then((d) => {
+      if (!cancelled && d) setSetup(d);
     });
+    refreshSetup().then((d) => {
+      if (!cancelled && d) setSetup(d);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
