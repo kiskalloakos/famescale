@@ -12,8 +12,10 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { DASHBOARD_KEY, CURRENCY_KEY } from '../../constants/storage';
 
 interface Account {
   id: string;
@@ -29,15 +31,13 @@ interface Cost {
 }
 
 const CURRENCIES = [
-  { code: 'RON', symbol: 'lei ', name: 'Romanian Leu' },
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-  { code: 'GBP', symbol: '£', name: 'British Pound' },
-  { code: 'HUF', symbol: 'Ft ', name: 'Hungarian Forint' },
-  { code: 'CHF', symbol: 'Fr ', name: 'Swiss Franc' },
+  { code: 'RON', symbol: 'lei ' },
+  { code: 'USD', symbol: '$' },
+  { code: 'EUR', symbol: '€' },
+  { code: 'GBP', symbol: '£' },
+  { code: 'HUF', symbol: 'Ft ' },
+  { code: 'CHF', symbol: 'Fr ' },
 ];
-
-const STORAGE_KEY = '@famescale_dashboard';
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -62,28 +62,32 @@ export default function Dashboard() {
     visible: false,
     editing: null,
   });
-  const [currencyModal, setCurrencyModal] = useState(false);
 
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((data) => {
+    AsyncStorage.getItem(DASHBOARD_KEY).then((data) => {
       if (data) {
         const p = JSON.parse(data);
         setAccounts(p.accounts ?? []);
         setCosts(p.costs ?? []);
-        setCurrency(p.currency ?? 'RON');
       }
     });
   }, []);
 
-  const persist = useCallback(
-    (a: Account[], c: Cost[], cur: string) => {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ accounts: a, costs: c, currency: cur }));
-    },
-    [],
+  // Re-read currency whenever this tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.getItem(CURRENCY_KEY).then((val) => {
+        if (val) setCurrency(val);
+      });
+    }, []),
   );
+
+  const persist = useCallback((a: Account[], c: Cost[]) => {
+    AsyncStorage.setItem(DASHBOARD_KEY, JSON.stringify({ accounts: a, costs: c }));
+  }, []);
 
   const totalLiquid = accounts.reduce((s, a) => s + parseAmt(a.amount), 0);
   const totalCosts = costs.reduce((s, c) => s + parseAmt(c.amount), 0);
@@ -113,7 +117,7 @@ export default function Dashboard() {
         )
       : [...accounts, { id: Date.now().toString(), name: formName.trim(), amount: formAmount }];
     setAccounts(updated);
-    persist(updated, costs, currency);
+    persist(updated, costs);
     setAccountModal({ visible: false, editing: null });
   };
 
@@ -126,7 +130,7 @@ export default function Dashboard() {
         onPress: () => {
           const updated = accounts.filter((a) => a.id !== id);
           setAccounts(updated);
-          persist(updated, costs, currency);
+          persist(updated, costs);
         },
       },
     ]);
@@ -158,14 +162,14 @@ export default function Dashboard() {
           { id: Date.now().toString(), name: formName.trim(), amount: formAmount, paid: false },
         ];
     setCosts(updated);
-    persist(accounts, updated, currency);
+    persist(accounts, updated);
     setCostModal({ visible: false, editing: null });
   };
 
   const togglePaid = (id: string) => {
     const updated = costs.map((c) => (c.id === id ? { ...c, paid: !c.paid } : c));
     setCosts(updated);
-    persist(accounts, updated, currency);
+    persist(accounts, updated);
   };
 
   const deleteCost = (id: string) => {
@@ -177,27 +181,16 @@ export default function Dashboard() {
         onPress: () => {
           const updated = costs.filter((c) => c.id !== id);
           setCosts(updated);
-          persist(accounts, updated, currency);
+          persist(accounts, updated);
         },
       },
     ]);
   };
 
-  const changeCurrency = (code: string) => {
-    setCurrency(code);
-    persist(accounts, costs, code);
-    setCurrencyModal(false);
-  };
-
   return (
     <SafeAreaView style={s.container}>
-      {/* Header */}
       <View style={s.header}>
-        <Text style={s.headerTitle}>FAMESCALE</Text>
-        <TouchableOpacity style={s.currencyBadge} onPress={() => setCurrencyModal(true)}>
-          <Text style={s.currencyBadgeText}>{currency}</Text>
-          <Ionicons name="chevron-down" size={11} color="#777" />
-        </TouchableOpacity>
+        <Text style={s.headerTitle}>DASHBOARD</Text>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
@@ -304,10 +297,7 @@ export default function Dashboard() {
 
       {/* Account Modal */}
       <Modal visible={accountModal.visible} transparent animationType="slide">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={s.overlay}>
             <View style={s.sheet}>
               <Text style={s.sheetTitle}>
@@ -349,10 +339,7 @@ export default function Dashboard() {
 
       {/* Cost Modal */}
       <Modal visible={costModal.visible} transparent animationType="slide">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={s.overlay}>
             <View style={s.sheet}>
               <Text style={s.sheetTitle}>
@@ -391,64 +378,20 @@ export default function Dashboard() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
-      {/* Currency Modal */}
-      <Modal visible={currencyModal} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
-            <Text style={s.sheetTitle}>Select Currency</Text>
-            {CURRENCIES.map((c) => (
-              <TouchableOpacity
-                key={c.code}
-                style={[s.currencyRow, currency === c.code && s.currencyRowActive]}
-                onPress={() => changeCurrency(c.code)}
-              >
-                <Text style={s.currencySymbol}>{c.symbol.trim()}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.currencyCode}>{c.code}</Text>
-                  <Text style={s.currencyName}>{c.name}</Text>
-                </View>
-                {currency === c.code && (
-                  <Ionicons name="checkmark" size={18} color="#00C896" />
-                )}
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={[s.btnCancel, { marginTop: 12 }]} onPress={() => setCurrencyModal(false)}>
-              <Text style={s.btnCancelText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
-  currencyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#1A1A1A',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#2C2C2C',
-  },
-  currencyBadgeText: { fontSize: 12, fontWeight: '600', color: '#AAA' },
-
   scroll: { paddingHorizontal: 16 },
-
   heroCard: {
     backgroundColor: '#151515',
     borderRadius: 20,
@@ -457,20 +400,13 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222',
   },
-  heroLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#555',
-    letterSpacing: 1.5,
-    marginBottom: 10,
-  },
+  heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5, marginBottom: 10 },
   heroAmount: { fontSize: 38, fontWeight: '700', color: '#FFF', letterSpacing: -1 },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroSubLabel: { fontSize: 13, color: '#555' },
   heroSubValue: { fontSize: 17, fontWeight: '600', color: '#00C896' },
   negative: { color: '#FF4C4C' },
-
   card: {
     backgroundColor: '#151515',
     borderRadius: 16,
@@ -497,7 +433,6 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2C2C2C',
   },
-
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -511,7 +446,6 @@ const s = StyleSheet.create({
   rowValue: { fontSize: 14, color: '#888' },
   checkbox: { marginRight: 12 },
   strikethrough: { color: '#444', textDecorationLine: 'line-through' },
-
   empty: {
     alignItems: 'center',
     paddingVertical: 30,
@@ -520,7 +454,6 @@ const s = StyleSheet.create({
     borderTopColor: '#1C1C1C',
   },
   emptyText: { fontSize: 13, color: '#3A3A3A' },
-
   addCostRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -530,12 +463,7 @@ const s = StyleSheet.create({
     borderTopColor: '#1C1C1C',
   },
   addCostText: { fontSize: 14, color: '#00C896', fontWeight: '500' },
-
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'flex-end',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#1A1A1A',
     borderTopLeftRadius: 24,
@@ -583,18 +511,4 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
-
-  currencyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    marginBottom: 2,
-  },
-  currencyRowActive: { backgroundColor: '#222' },
-  currencySymbol: { fontSize: 18, color: '#FFF', width: 28, textAlign: 'center' },
-  currencyCode: { fontSize: 14, fontWeight: '600', color: '#FFF' },
-  currencyName: { fontSize: 12, color: '#555', marginTop: 1 },
 });
