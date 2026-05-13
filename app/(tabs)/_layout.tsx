@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SetupData, getSetup, refreshSetup } from '../../lib/setup';
+import { SetupData, getSetup, refreshSetup, subscribeSetup } from '../../lib/setup';
 
 export default function TabLayout() {
   const [setup, setSetup] = useState<SetupData>({
     completed: true,
-    investmentTabName: 'Investments',
+    showInvestments: true,
+    showSavings: false,
     showRevenue: true,
+    showDebts: false,
+    showNetWorth: false,
+    includeDebtsInNetWorth: true,
   });
 
   useEffect(() => {
@@ -18,8 +22,12 @@ export default function TabLayout() {
     refreshSetup().then((d) => {
       if (!cancelled && d) setSetup(d);
     });
+    const unsubscribe = subscribeSetup((d) => {
+      if (!cancelled) setSetup(d);
+    });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -48,13 +56,20 @@ export default function TabLayout() {
       <Tabs.Screen
         name="investments"
         options={{
-          title: setup.investmentTabName,
+          title: 'Investments',
+          href: setup.showInvestments ? undefined : null,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name={setup.investmentTabName === 'Savings' ? 'wallet-outline' : 'trending-up-outline'}
-              size={size}
-              color={color}
-            />
+            <Ionicons name="trending-up-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="savings"
+        options={{
+          title: 'Savings',
+          href: setup.showSavings ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="wallet-outline" size={size} color={color} />
           ),
         }}
       />
@@ -65,6 +80,26 @@ export default function TabLayout() {
           href: setup.showRevenue ? undefined : null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bar-chart-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="debts"
+        options={{
+          title: 'Debts',
+          href: setup.showDebts ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="document-text-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="net-worth"
+        options={{
+          title: 'Net Worth',
+          href: setup.showNetWorth ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="pulse-outline" size={size} color={color} />
           ),
         }}
       />

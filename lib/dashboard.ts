@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { load, save } from './storage';
+import { reportable } from './sync';
 
 export interface Account {
   id: string;
@@ -14,6 +15,15 @@ export interface Cost {
   amount: string;
   paid: boolean;
   position: number;
+  dueDay: number;                        // 1–31, day of month bill is due
+  paidFromAccountId?: string | null;     // which account funded the payment
+  paidMonth?: string | null;             // "YYYY-MM" — used for monthly auto-reset
+}
+
+// "YYYY-MM" key for the current calendar month.
+export function currentMonthKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export interface DashboardData {
@@ -60,7 +70,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       .order('position', { ascending: true }),
     supabase
       .from('costs')
-      .select('id, name, amount, paid, position')
+      .select('id, name, amount, paid, position, due_day, paid_from_account_id, paid_month')
       .eq('user_id', uid)
       .order('position', { ascending: true }),
   ]);
@@ -80,6 +90,9 @@ export async function refreshDashboard(): Promise<DashboardData> {
       amount: String(r.amount),
       paid: r.paid,
       position: r.position,
+      dueDay: r.due_day ?? 1,
+      paidFromAccountId: r.paid_from_account_id,
+      paidMonth: r.paid_month,
     })),
   };
   await persistCache(data);
@@ -96,13 +109,15 @@ export async function saveAccount(account: Account): Promise<void> {
 
   const uid = await userId();
   if (!uid) return;
-  await supabase.from('accounts').upsert({
-    id: account.id,
-    user_id: uid,
-    name: account.name,
-    amount: parseFloat(account.amount) || 0,
-    position: account.position,
-  });
+  await reportable(
+    supabase.from('accounts').upsert({
+      id: account.id,
+      user_id: uid,
+      name: account.name,
+      amount: parseFloat(account.amount) || 0,
+      position: account.position,
+    }),
+  );
 }
 
 export async function deleteAccount(id: string): Promise<void> {
@@ -111,7 +126,7 @@ export async function deleteAccount(id: string): Promise<void> {
 
   const uid = await userId();
   if (!uid) return;
-  await supabase.from('accounts').delete().eq('id', id).eq('user_id', uid);
+  await reportable(supabase.from('accounts').delete().eq('id', id).eq('user_id', uid));
 }
 
 // ── Cost ops ────────────────────────────────────────────────
@@ -124,14 +139,19 @@ export async function saveCost(cost: Cost): Promise<void> {
 
   const uid = await userId();
   if (!uid) return;
-  await supabase.from('costs').upsert({
-    id: cost.id,
-    user_id: uid,
-    name: cost.name,
-    amount: parseFloat(cost.amount) || 0,
-    paid: cost.paid,
-    position: cost.position,
-  });
+  await reportable(
+    supabase.from('costs').upsert({
+      id: cost.id,
+      user_id: uid,
+      name: cost.name,
+      amount: parseFloat(cost.amount) || 0,
+      paid: cost.paid,
+      position: cost.position,
+      due_day: cost.dueDay,
+      paid_from_account_id: cost.paidFromAccountId ?? null,
+      paid_month: cost.paidMonth ?? null,
+    }),
+  );
 }
 
 export async function deleteCost(id: string): Promise<void> {
@@ -140,5 +160,5 @@ export async function deleteCost(id: string): Promise<void> {
 
   const uid = await userId();
   if (!uid) return;
-  await supabase.from('costs').delete().eq('id', id).eq('user_id', uid);
+  await reportable(supabase.from('costs').delete().eq('id', id).eq('user_id', uid));
 }

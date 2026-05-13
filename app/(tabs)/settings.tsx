@@ -7,13 +7,11 @@ import {
   Modal,
   StyleSheet,
   Alert,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { SetupData, getSetup, refreshSetup } from '../../lib/setup';
+import { SetupData, getSetup, refreshSetup, saveSetup } from '../../lib/setup';
 import {
   PageKey,
   getCurrencySettings,
@@ -21,7 +19,6 @@ import {
   saveGlobalCurrency,
   saveOverrideCurrency,
 } from '../../lib/currency';
-import { remove as removeStored } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 
 const CURRENCIES = [
@@ -33,10 +30,6 @@ const CURRENCIES = [
   { code: 'CHF', symbol: 'Fr', name: 'Swiss Franc' },
 ];
 
-function reloadPage() {
-  if (Platform.OS === 'web') (window as any).location.reload();
-}
-
 export default function Settings() {
   const [currency, setCurrency] = useState('RON');
   const [overrides, setOverrides] = useState<Partial<Record<PageKey, string>>>({});
@@ -44,9 +37,9 @@ export default function Settings() {
   const [email, setEmail] = useState<string | null>(null);
 
   const [currencyModal, setCurrencyModal] = useState(false);
-  const [perPageModal, setPerPageModal] = useState(false);
-  const [pagePicker, setPagePicker] = useState<{ visible: boolean; page: PageKey | null }>({
+  const [perPage, setPerPage] = useState<{ visible: boolean; view: 'list' | 'picker'; page: PageKey | null }>({
     visible: false,
+    view: 'list',
     page: null,
   });
 
@@ -94,6 +87,15 @@ export default function Settings() {
     setCurrencyModal(false);
   };
 
+  const toggleTab = async (
+    key: 'showInvestments' | 'showSavings' | 'showRevenue' | 'showDebts' | 'showNetWorth',
+  ) => {
+    if (!setup) return;
+    const next: SetupData = { ...setup, [key]: !setup[key] };
+    setSetup(next);
+    await saveSetup(next);
+  };
+
   const changeOverride = async (page: PageKey, code: string | null) => {
     if (code === null) {
       const next = { ...overrides };
@@ -103,36 +105,7 @@ export default function Settings() {
       setOverrides({ ...overrides, [page]: code });
     }
     await saveOverrideCurrency(page, code);
-    setPagePicker({ visible: false, page: null });
-  };
-
-  // ── Dev actions ─────────────────────────────────────────────────────────
-  const resetOnboarding = () => {
-    Alert.alert('Reset Onboarding', 'Clears your setup preferences and restarts onboarding on reload.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reset',
-        style: 'destructive',
-        onPress: async () => {
-          await removeStored('setup');
-          reloadPage();
-        },
-      },
-    ]);
-  };
-
-  const clearAllData = () => {
-    Alert.alert('Clear All Data', 'Deletes everything — accounts, costs, investments, revenue, and settings. Cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear Everything',
-        style: 'destructive',
-        onPress: async () => {
-          await AsyncStorage.clear();
-          reloadPage();
-        },
-      },
-    ]);
+    setPerPage({ visible: true, view: 'list', page: null });
   };
 
   const selectedCurrency = CURRENCIES.find((c) => c.code === currency);
@@ -171,7 +144,10 @@ export default function Settings() {
               <Ionicons name="chevron-forward" size={14} color="#333" style={{ marginLeft: 6 }} />
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.row, s.subtleRow]} onPress={() => setPerPageModal(true)}>
+          <TouchableOpacity
+            style={[s.row, s.subtleRow]}
+            onPress={() => setPerPage({ visible: true, view: 'list', page: null })}
+          >
             <View style={s.rowIcon} />
             <Text style={s.subtleLabel}>Customize per page</Text>
             {Object.keys(overrides).length > 0 && (
@@ -182,6 +158,82 @@ export default function Settings() {
             <Ionicons name="chevron-forward" size={13} color="#2A2A2A" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
         </View>
+
+        {/* Optional tabs */}
+        {setup && (
+          <>
+            <Text style={s.sectionLabel}>TABS</Text>
+            <View style={s.card}>
+              {(() => {
+                const items: {
+                  key: 'showInvestments' | 'showSavings' | 'showRevenue' | 'showDebts' | 'showNetWorth';
+                  icon: keyof typeof Ionicons.glyphMap;
+                  title: string;
+                  desc: string;
+                }[] = [
+                  {
+                    key: 'showInvestments',
+                    icon: 'trending-up-outline',
+                    title: 'Investments',
+                    desc: 'Project portfolio growth with compound returns.',
+                  },
+                  {
+                    key: 'showSavings',
+                    icon: 'wallet-outline',
+                    title: 'Savings',
+                    desc: 'Track savings goals and interest accumulation.',
+                  },
+                  {
+                    key: 'showRevenue',
+                    icon: 'bar-chart-outline',
+                    title: 'Revenue',
+                    desc: 'Log yearly income, monthly breakdown, growth.',
+                  },
+                  {
+                    key: 'showDebts',
+                    icon: 'document-text-outline',
+                    title: 'Debts',
+                    desc: 'Track what you owe — loans, cards, IOUs.',
+                  },
+                  {
+                    key: 'showNetWorth',
+                    icon: 'pulse-outline',
+                    title: 'Net Worth',
+                    desc: 'Cash + investments − debts in one number.',
+                  },
+                ];
+                return items.map((item, i) => {
+                  const enabled = setup[item.key];
+                  return (
+                    <TouchableOpacity
+                      key={item.key}
+                      style={[s.tabRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
+                      onPress={() => toggleTab(item.key)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={s.rowIcon}>
+                        <Ionicons
+                          name={item.icon}
+                          size={16}
+                          color={enabled ? '#00C896' : '#444'}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.tabRowTitle, !enabled && s.tabRowTitleDim]}>
+                          {item.title}
+                        </Text>
+                        <Text style={s.tabRowDesc}>{item.desc}</Text>
+                      </View>
+                      <Text style={enabled ? s.enabledTag : s.disabledTag}>
+                        {enabled ? 'ON' : 'OFF'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                });
+              })()}
+            </View>
+          </>
+        )}
 
         {/* About */}
         <Text style={s.sectionLabel}>ABOUT</Text>
@@ -200,28 +252,6 @@ export default function Settings() {
             <Text style={s.rowLabel}>Built with</Text>
             <Text style={s.rowValue}>Expo · React Native</Text>
           </View>
-        </View>
-
-        {/* Dev Tools */}
-        <Text style={s.sectionLabel}>DEVELOPER TOOLS</Text>
-        <View style={s.card}>
-          <TouchableOpacity style={s.row} onPress={resetOnboarding}>
-            <View style={s.rowIcon}>
-              <Ionicons name="refresh-outline" size={16} color="#F59E0B" />
-            </View>
-            <Text style={[s.rowLabel, s.warnText]}>Reset Onboarding</Text>
-            <Ionicons name="chevron-forward" size={14} color="#333" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.row, { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
-            onPress={clearAllData}
-          >
-            <View style={s.rowIcon}>
-              <Ionicons name="trash-outline" size={16} color="#FF4C4C" />
-            </View>
-            <Text style={[s.rowLabel, s.dangerText]}>Clear All Data</Text>
-            <Ionicons name="chevron-forward" size={14} color="#333" />
-          </TouchableOpacity>
         </View>
 
         <View style={{ height: 40 }} />
@@ -253,110 +283,113 @@ export default function Settings() {
         </View>
       </Modal>
 
-      {/* Per-page currency modal */}
-      <Modal visible={perPageModal} transparent animationType="slide">
+      {/* Per-page currency — single modal, two views (list → picker) */}
+      <Modal visible={perPage.visible} transparent animationType="slide">
         <View style={s.overlay}>
           <View style={s.sheet}>
-            <Text style={s.sheetTitle}>Currency per page</Text>
-            <Text style={s.sheetSub}>
-              Pick a different currency for any page. Default is the global currency.
-            </Text>
-
-            {(() => {
-              const pages: { key: PageKey; label: string }[] = [
-                { key: 'dashboard', label: 'Dashboard' },
-                { key: 'investments', label: setup?.investmentTabName ?? 'Investments' },
-              ];
-              if (setup?.showRevenue !== false) {
-                pages.push({ key: 'revenue', label: 'Revenue' });
-              }
-              return pages.map((p, i) => {
-                const override = overrides[p.key];
-                const effective = override ?? currency;
-                const symbolFor = CURRENCIES.find((c) => c.code === effective)?.symbol ?? effective;
-                return (
-                  <TouchableOpacity
-                    key={p.key}
-                    style={[s.pageRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#222' }]}
-                    onPress={() => setPagePicker({ visible: true, page: p.key })}
-                  >
-                    <Text style={s.pageRowLabel}>{p.label}</Text>
-                    <View style={s.pageRowRight}>
-                      <Text style={[s.pageRowValue, override ? s.pageRowOverride : null]}>
-                        {symbolFor} {effective}
-                      </Text>
-                      <Text style={s.pageRowHint}>
-                        {override ? 'override' : 'global'}
-                      </Text>
-                      <Ionicons name="chevron-forward" size={14} color="#333" />
-                    </View>
-                  </TouchableOpacity>
-                );
-              });
-            })()}
-
-            <TouchableOpacity style={[s.closeBtn, { marginTop: 16 }]} onPress={() => setPerPageModal(false)}>
-              <Text style={s.closeBtnText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Page-specific currency picker (with "Use global" option) */}
-      <Modal visible={pagePicker.visible} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
-            <Text style={s.sheetTitle}>
-              {pagePicker.page
-                ? `Currency · ${
-                    pagePicker.page === 'investments'
-                      ? setup?.investmentTabName ?? 'Investments'
-                      : pagePicker.page.charAt(0).toUpperCase() + pagePicker.page.slice(1)
-                  }`
-                : 'Currency'}
-            </Text>
-
-            {/* Use global option */}
-            <TouchableOpacity
-              style={[s.currencyRow, !pagePicker.page || !overrides[pagePicker.page] ? s.currencyRowActive : null]}
-              onPress={() => pagePicker.page && changeOverride(pagePicker.page, null)}
-            >
-              <Ionicons name="globe-outline" size={20} color="#888" style={{ width: 28, textAlign: 'center' }} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.currencyCode}>Use global</Text>
-                <Text style={s.currencyName}>Currently {currency}</Text>
-              </View>
-              {pagePicker.page && !overrides[pagePicker.page] && (
-                <Ionicons name="checkmark-circle" size={20} color="#00C896" />
-              )}
-            </TouchableOpacity>
-
-            <View style={s.divider} />
-
-            {CURRENCIES.map((c) => {
-              const isSelected = pagePicker.page && overrides[pagePicker.page] === c.code;
-              return (
+            {perPage.view === 'list' ? (
+              <>
+                <Text style={s.sheetTitle}>Currency per page</Text>
+                <Text style={s.sheetSub}>
+                  Pick a different currency for any page. Default is the global currency.
+                </Text>
+                {(() => {
+                  const pages: { key: PageKey; label: string }[] = [
+                    { key: 'dashboard', label: 'Dashboard' },
+                  ];
+                  if (setup?.showInvestments !== false) {
+                    pages.push({ key: 'investments', label: 'Investments' });
+                  }
+                  if (setup?.showSavings) {
+                    pages.push({ key: 'savings', label: 'Savings' });
+                  }
+                  if (setup?.showRevenue !== false) {
+                    pages.push({ key: 'revenue', label: 'Revenue' });
+                  }
+                  if (setup?.showDebts) {
+                    pages.push({ key: 'debts', label: 'Debts' });
+                  }
+                  return pages.map((p, i) => {
+                    const override = overrides[p.key];
+                    const effective = override ?? currency;
+                    const symbolFor = CURRENCIES.find((c) => c.code === effective)?.symbol ?? effective;
+                    return (
+                      <TouchableOpacity
+                        key={p.key}
+                        style={[s.pageRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#222' }]}
+                        onPress={() => setPerPage({ visible: true, view: 'picker', page: p.key })}
+                      >
+                        <Text style={s.pageRowLabel}>{p.label}</Text>
+                        <View style={s.pageRowRight}>
+                          <Text style={[s.pageRowValue, override ? s.pageRowOverride : null]}>
+                            {symbolFor} {effective}
+                          </Text>
+                          <Text style={s.pageRowHint}>{override ? 'override' : 'global'}</Text>
+                          <Ionicons name="chevron-forward" size={14} color="#333" />
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  });
+                })()}
                 <TouchableOpacity
-                  key={c.code}
-                  style={[s.currencyRow, isSelected && s.currencyRowActive]}
-                  onPress={() => pagePicker.page && changeOverride(pagePicker.page, c.code)}
+                  style={[s.closeBtn, { marginTop: 16 }]}
+                  onPress={() => setPerPage({ visible: false, view: 'list', page: null })}
                 >
-                  <Text style={s.currencySymbol}>{c.symbol}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.currencyCode}>{c.code}</Text>
-                    <Text style={s.currencyName}>{c.name}</Text>
-                  </View>
-                  {isSelected && <Ionicons name="checkmark-circle" size={20} color="#00C896" />}
+                  <Text style={s.closeBtnText}>Done</Text>
                 </TouchableOpacity>
-              );
-            })}
+              </>
+            ) : (
+              <>
+                <View style={s.subTopBar}>
+                  <TouchableOpacity
+                    style={s.subBack}
+                    onPress={() => setPerPage({ visible: true, view: 'list', page: null })}
+                  >
+                    <Ionicons name="chevron-back" size={18} color="#888" />
+                    <Text style={s.subBackText}>Back</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={s.sheetTitle}>
+                  {perPage.page
+                    ? perPage.page.charAt(0).toUpperCase() + perPage.page.slice(1)
+                    : ''}
+                </Text>
 
-            <TouchableOpacity
-              style={[s.closeBtn, { marginTop: 12 }]}
-              onPress={() => setPagePicker({ visible: false, page: null })}
-            >
-              <Text style={s.closeBtnText}>Cancel</Text>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.currencyRow, perPage.page && !overrides[perPage.page] ? s.currencyRowActive : null]}
+                  onPress={() => perPage.page && changeOverride(perPage.page, null)}
+                >
+                  <Ionicons name="globe-outline" size={20} color="#888" style={{ width: 28, textAlign: 'center' }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.currencyCode}>Use global</Text>
+                    <Text style={s.currencyName}>Currently {currency}</Text>
+                  </View>
+                  {perPage.page && !overrides[perPage.page] && (
+                    <Ionicons name="checkmark-circle" size={20} color="#00C896" />
+                  )}
+                </TouchableOpacity>
+
+                <View style={s.divider} />
+
+                {CURRENCIES.map((c) => {
+                  const isSelected = perPage.page && overrides[perPage.page] === c.code;
+                  return (
+                    <TouchableOpacity
+                      key={c.code}
+                      style={[s.currencyRow, isSelected && s.currencyRowActive]}
+                      onPress={() => perPage.page && changeOverride(perPage.page, c.code)}
+                    >
+                      <Text style={s.currencySymbol}>{c.symbol}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.currencyCode}>{c.code}</Text>
+                        <Text style={s.currencyName}>{c.name}</Text>
+                      </View>
+                      {isSelected && <Ionicons name="checkmark-circle" size={20} color="#00C896" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -436,8 +469,6 @@ const s = StyleSheet.create({
   rowRight: { flexDirection: 'row', alignItems: 'center' },
   rowValue: { fontSize: 13, color: '#555' },
   currentTag: { fontSize: 11, color: '#3A6A5A', fontWeight: '400' },
-  warnText: { color: '#F59E0B' },
-  dangerText: { color: '#FF4C4C' },
 
   // Subtle "Customize per page" row inside the currency card
   subtleRow: {
@@ -446,6 +477,75 @@ const s = StyleSheet.create({
     paddingVertical: 11,
   },
   subtleLabel: { flex: 1, fontSize: 12, color: '#555', fontWeight: '400' },
+  subtleHint: { fontSize: 10, color: '#333', marginTop: 2 },
+  enabledTag: {
+    fontSize: 9,
+    color: '#00C896',
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1F3A30',
+    backgroundColor: '#0D1F1A',
+  },
+  disabledTag: {
+    fontSize: 9,
+    color: '#444',
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+
+  // Optional tab toggle row (Revenue / Debts / Net Worth)
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  tabRowTitle: { fontSize: 14, fontWeight: '600', color: '#EEE' },
+  tabRowTitleDim: { color: '#666' },
+  tabRowDesc: { fontSize: 11, color: '#444', marginTop: 2, lineHeight: 14 },
+
+  // Prominent CTA when revenue tracking is disabled
+  ctaCard: {
+    backgroundColor: '#0F1A17',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#1F3A30',
+    padding: 22,
+    marginBottom: 24,
+    alignItems: 'flex-start',
+  },
+  ctaIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#0D1F1A',
+    borderWidth: 1,
+    borderColor: '#1F3A30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  ctaTitle: { fontSize: 17, fontWeight: '700', color: '#FFF', marginBottom: 6 },
+  ctaSub: { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 18 },
+  ctaBtn: {
+    backgroundColor: '#00C896',
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 10,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  ctaBtnText: { fontSize: 14, fontWeight: '700', color: '#000' },
   overrideBadge: {
     fontSize: 10,
     color: '#00C896',
@@ -472,6 +572,11 @@ const s = StyleSheet.create({
   pageRowOverride: { color: '#00C896' },
   pageRowHint: { fontSize: 10, color: '#444', letterSpacing: 0.5 },
   divider: { height: 1, backgroundColor: '#222', marginVertical: 8 },
+
+  // Back nav inside the per-page sheet
+  subTopBar: { flexDirection: 'row', marginBottom: 10 },
+  subBack: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
+  subBackText: { fontSize: 13, color: '#888', fontWeight: '500' },
 
   // Sheets
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },

@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { load, save } from './storage';
 import { newId } from './dashboard';
+import { reportable } from './sync';
 
 export interface RevenueEntry {
   id: string;            // UUID — stable across renames + cloud sync
@@ -85,7 +86,7 @@ export async function saveRevenue(state: RevenueState): Promise<void> {
   const toDelete = [...remoteIds].filter((id) => !localIds.has(id));
 
   if (toDelete.length > 0) {
-    await supabase.from('revenue_entries').delete().in('id', toDelete);
+    await reportable(supabase.from('revenue_entries').delete().in('id', toDelete));
   }
 
   if (state.entries.length > 0) {
@@ -97,7 +98,7 @@ export async function saveRevenue(state: RevenueState): Promise<void> {
       months: e.months ?? null,
       is_current: e.label === state.currentYearLabel,
     }));
-    await supabase.from('revenue_entries').upsert(rows);
+    await reportable(supabase.from('revenue_entries').upsert(rows));
   }
 }
 

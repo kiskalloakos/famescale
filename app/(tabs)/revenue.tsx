@@ -27,6 +27,7 @@ import {
   activeMonthCount,
 } from '../../lib/revenue';
 import { newId } from '../../lib/dashboard';
+import { showToast } from '../../lib/toast';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -57,6 +58,7 @@ export default function Revenue() {
   const [formLabel, setFormLabel] = useState('');
   const [formAmount, setFormAmount] = useState('');
   const [formCurrent, setFormCurrent] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -194,31 +196,51 @@ export default function Revenue() {
     setEntryModal({ visible: false, editing: null });
   };
 
-  const deleteEntry = (entry: RevenueEntry) => {
+  const deleteEntry = async (entry: RevenueEntry) => {
     if (state.entries.length === 1) {
       Alert.alert('Cannot delete', 'You need at least one revenue entry.');
       return;
     }
-    Alert.alert('Delete entry', `Remove revenue for "${entry.label}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          const entries = state.entries.filter((e) => e.label !== entry.label);
-          let currentYearLabel = state.currentYearLabel;
-          if (entry.label === currentYearLabel) {
-            currentYearLabel = sortEntries(entries)[0]?.label ?? String(new Date().getFullYear());
-          }
-          const updated: RevenueState = { currentYearLabel, entries };
-          setState(updated);
-          await saveRevenue(updated);
-        },
+    setEntryModal({ visible: false, editing: null });
+    const before = state;
+    const entries = state.entries.filter((e) => e.id !== entry.id);
+    let currentYearLabel = state.currentYearLabel;
+    if (entry.label === currentYearLabel) {
+      currentYearLabel = sortEntries(entries)[0]?.label ?? String(new Date().getFullYear());
+    }
+    const updated: RevenueState = { currentYearLabel, entries };
+    setState(updated);
+    await saveRevenue(updated);
+    showToast(`Deleted ${entry.label}`, {
+      label: 'Undo',
+      onPress: async () => {
+        setState(before);
+        await saveRevenue(before);
       },
-    ]);
+    });
   };
 
   const sortedEntries = sortEntries(state.entries);
+
+  // New-year reminder: current label's year is behind the calendar year.
+  const calYear = new Date().getFullYear();
+  const labelYear = parseInt(state.currentYearLabel, 10);
+  const showNewYearBanner =
+    !isNaN(labelYear) &&
+    labelYear < calYear &&
+    !state.entries.some((e) => e.label === String(calYear)) &&
+    !bannerDismissed;
+
+  const addNewYearEntry = async () => {
+    const label = String(calYear);
+    const entry: RevenueEntry = { id: newId(), label, amount: 0 };
+    const updated: RevenueState = {
+      currentYearLabel: label,
+      entries: [...state.entries, entry],
+    };
+    setState(updated);
+    await saveRevenue(updated);
+  };
 
   return (
     <SafeAreaView style={s.container}>
@@ -227,6 +249,25 @@ export default function Revenue() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        {/* New-year reminder banner */}
+        {showNewYearBanner && (
+          <View style={s.banner}>
+            <Ionicons name="alarm-outline" size={18} color="#00C896" />
+            <View style={{ flex: 1 }}>
+              <Text style={s.bannerTitle}>It's {calYear}</Text>
+              <Text style={s.bannerSub}>
+                Don't forget to reset — add a new year to track this year's revenue.
+              </Text>
+            </View>
+            <TouchableOpacity style={s.bannerBtn} onPress={addNewYearEntry}>
+              <Text style={s.bannerBtnText}>Add {calYear}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.bannerClose} onPress={() => setBannerDismissed(true)}>
+              <Ionicons name="close" size={14} color="#555" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Main current-year card */}
         <TouchableOpacity style={s.heroCard} onPress={openEdit} activeOpacity={0.85}>
           <View style={s.heroTopRow}>
@@ -319,7 +360,6 @@ export default function Revenue() {
                 key={entry.id}
                 style={[s.historyRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
                 onPress={() => openEditEntry(entry)}
-                onLongPress={() => deleteEntry(entry)}
               >
                 <View style={s.historyDot}>
                   <Ionicons
@@ -445,6 +485,15 @@ export default function Revenue() {
                   <Text style={s.btnSaveText}>Save</Text>
                 </TouchableOpacity>
               </View>
+              {entryModal.editing && state.entries.length > 1 && (
+                <TouchableOpacity
+                  style={s.deleteLink}
+                  onPress={() => deleteEntry(entryModal.editing!)}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+                  <Text style={s.deleteLinkText}>Delete year</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -523,6 +572,30 @@ const s = StyleSheet.create({
   breakdownEmpty: { color: '#2A2A2A', fontWeight: '400' },
 
   footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 8, lineHeight: 18 },
+
+  // New-year reminder banner
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#0F1A17',
+    borderColor: '#1F3A30',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  bannerTitle: { fontSize: 13, fontWeight: '700', color: '#FFF' },
+  bannerSub: { fontSize: 11, color: '#555', marginTop: 2, lineHeight: 14 },
+  bannerBtn: {
+    backgroundColor: '#00C896',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  bannerBtnText: { fontSize: 12, fontWeight: '700', color: '#000' },
+  bannerClose: { padding: 4 },
 
   // Revenue history card
   historyCard: {
@@ -657,4 +730,14 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
+
+  deleteLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  deleteLinkText: { fontSize: 13, color: '#FF6B6B', fontWeight: '500' },
 });

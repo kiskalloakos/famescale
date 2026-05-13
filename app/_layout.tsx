@@ -3,9 +3,12 @@ import { View, Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import OnboardingFlow from '../components/OnboardingFlow';
 import AuthScreen from '../components/AuthScreen';
 import SetNewPassword from '../components/SetNewPassword';
+import ToastHost from '../components/ToastHost';
+import SyncIndicator from '../components/SyncIndicator';
 import { supabase } from '../lib/supabase';
 import { setProfile } from '../lib/storage';
 import { getSetup, refreshSetup } from '../lib/setup';
@@ -117,9 +120,13 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style="light" />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+        <SyncIndicator />
+        <ToastHost />
+        <StatusBar style="light" />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

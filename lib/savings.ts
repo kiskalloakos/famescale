@@ -2,20 +2,20 @@ import { supabase } from './supabase';
 import { load, save } from './storage';
 import { reportable } from './sync';
 
-export interface InvestmentData {
+export interface SavingsData {
   totalInvested: string;
   startMonth: string;
   startYear: string;
   annualReturn: string;
 }
 
-const NS = 'investments';
+const NS = 'savings';
 
-const DEFAULT: InvestmentData = {
+const DEFAULT: SavingsData = {
   totalInvested: '',
   startMonth: String(new Date().getMonth() + 1),
   startYear: String(new Date().getFullYear()),
-  annualReturn: '7',
+  annualReturn: '5',
 };
 
 async function userId(): Promise<string | null> {
@@ -23,20 +23,20 @@ async function userId(): Promise<string | null> {
   return user?.id ?? null;
 }
 
-export async function getInvestments(): Promise<InvestmentData> {
-  return load<InvestmentData>(NS, DEFAULT);
+export async function getSavings(): Promise<SavingsData> {
+  return load<SavingsData>(NS, DEFAULT);
 }
 
-export async function refreshInvestments(): Promise<InvestmentData> {
+export async function refreshSavings(): Promise<SavingsData> {
   const uid = await userId();
-  if (!uid) return getInvestments();
+  if (!uid) return getSavings();
   const { data, error } = await supabase
-    .from('investment_setup')
+    .from('savings_setup')
     .select('total_invested, start_month, start_year, annual_return')
     .eq('user_id', uid)
     .maybeSingle();
-  if (error || !data) return getInvestments();
-  const result: InvestmentData = {
+  if (error || !data) return getSavings();
+  const result: SavingsData = {
     totalInvested: data.total_invested ? String(data.total_invested) : '',
     startMonth: String(data.start_month),
     startYear: String(data.start_year),
@@ -46,20 +46,20 @@ export async function refreshInvestments(): Promise<InvestmentData> {
   return result;
 }
 
-export async function saveInvestments(d: InvestmentData): Promise<void> {
+export async function saveSavings(d: SavingsData): Promise<void> {
   await save(NS, d);
   const uid = await userId();
   if (!uid) return;
   await reportable(
     supabase
-      .from('investment_setup')
+      .from('savings_setup')
       .upsert(
         {
           user_id: uid,
           total_invested: parseFloat(d.totalInvested) || 0,
           start_month: parseInt(d.startMonth) || 1,
           start_year: parseInt(d.startYear) || new Date().getFullYear(),
-          annual_return: parseFloat(d.annualReturn) || 7,
+          annual_return: parseFloat(d.annualReturn) || 5,
         },
         { onConflict: 'user_id' },
       ),

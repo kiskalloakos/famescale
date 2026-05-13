@@ -25,7 +25,23 @@ import {
   saveCost as persistCost,
   deleteCost as removeCost,
   newId,
+  currentMonthKey,
 } from '../../lib/dashboard';
+import { showToast } from '../../lib/toast';
+import { useDragReorder } from '../../lib/useDragReorder';
+import DraggableRow from '../../components/DraggableRow';
+import SortableScroll from '../../components/SortableScroll';
+import { NestableDraggableFlatList, RenderItemParams } from 'react-native-draggable-flatlist';
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function monthName(key: string): string {
+  const m = parseInt(key.split('-')[1], 10) - 1;
+  return MONTH_NAMES[m] ?? key;
+}
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -45,6 +61,12 @@ function parseAmt(s: string): number {
   return isNaN(n) ? 0 : n;
 }
 
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [costs, setCosts] = useState<Cost[]>([]);
@@ -59,23 +81,53 @@ export default function Dashboard() {
     visible: false,
     editing: null,
   });
+  const [accountPicker, setAccountPicker] = useState<{ visible: boolean; cost: Cost | null }>({
+    visible: false,
+    cost: null,
+  });
+  const [moneyModal, setMoneyModal] = useState<{ visible: boolean; mode: 'add' | 'remove' }>({
+    visible: false,
+    mode: 'add',
+  });
+  const [moneyAmount, setMoneyAmount] = useState('');
 
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
+  const [formDueDay, setFormDueDay] = useState('1');
+
+  // ── Auto-reset paid costs that were paid in a previous month ──────────────
+  const applyDashboard = useCallback(async (d: ReturnType<typeof getDashboard> extends Promise<infer T> ? T : never) => {
+    const month = currentMonthKey();
+    const reset: Cost[] = [];
+    const next: Cost[] = d.costs.map((c) => {
+      if (c.paid && c.paidMonth && c.paidMonth !== month) {
+        const cleared: Cost = { ...c, paid: false, paidFromAccountId: null, paidMonth: null };
+        reset.push(cleared);
+        return cleared;
+      }
+      return c;
+    });
+    setAccounts(d.accounts);
+    setCosts(next);
+    if (reset.length > 0) {
+      // Persist resets to Supabase (no refund — payment already happened)
+      for (const c of reset) {
+        await persistCost(c);
+      }
+      showToast(
+        `Reset ${reset.length} ${reset.length === 1 ? 'cost' : 'costs'} for ${monthName(month)} — last month's payments stayed deducted.`,
+      );
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      // Cache first (instant), then remote refresh.
       getDashboard().then((d) => {
-        if (cancelled) return;
-        setAccounts(d.accounts);
-        setCosts(d.costs);
+        if (!cancelled) applyDashboard(d);
       });
       refreshDashboard().then((d) => {
-        if (cancelled) return;
-        setAccounts(d.accounts);
-        setCosts(d.costs);
+        if (!cancelled) applyDashboard(d);
       });
       getCurrencyForPage('dashboard').then((c) => {
         if (!cancelled) setCurrency(c);
@@ -86,15 +138,16 @@ export default function Dashboard() {
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [applyDashboard]),
   );
 
+  // ── Math ──────────────────────────────────────────────────────────────────
   const totalLiquid = accounts.reduce((s, a) => s + parseAmt(a.amount), 0);
-  const totalCosts = costs.reduce((s, c) => s + parseAmt(c.amount), 0);
-  const remaining = totalLiquid - totalCosts;
+  const unpaidCosts = costs.reduce((s, c) => (c.paid ? s : s + parseAmt(c.amount)), 0);
+  const afterPayments = totalLiquid - unpaidCosts;
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
 
-  // --- Accounts ---
+  // ── Accounts ──────────────────────────────────────────────────────────────
   const openAddAccount = () => {
     setFormName('');
     setFormAmount('');
@@ -125,91 +178,253 @@ export default function Dashboard() {
     await persistAccount(account);
   };
 
-  const deleteAccount = (id: string) => {
-    Alert.alert('Delete Account', 'Remove this account?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          setAccounts(accounts.filter((a) => a.id !== id));
-          await removeAccount(id);
-        },
+  // ── Drag-to-reorder ───────────────────────────────────────────────────────
+  const reorderAccounts = useCallback(async (next: Account[]) => {
+    const repositioned = next.map((a, i) => ({ ...a, position: i }));
+    setAccounts((prev) => {
+      // Persist any row whose position actually changed
+      for (const a of repositioned) {
+        const orig = prev.find((p) => p.id === a.id);
+        if (orig && orig.position !== a.position) persistAccount(a);
+      }
+      return repositioned;
+    });
+  }, []);
+
+  const reorderCosts = useCallback(async (next: Cost[]) => {
+    const repositioned = next.map((c, i) => ({ ...c, position: i }));
+    setCosts((prev) => {
+      for (const c of repositioned) {
+        const orig = prev.find((p) => p.id === c.id);
+        if (orig && orig.position !== c.position) persistCost(c);
+      }
+      return repositioned;
+    });
+  }, []);
+
+  const accountDrag = useDragReorder(accounts, reorderAccounts);
+  const costDrag = useDragReorder(costs, reorderCosts);
+
+  // ── Native renderers for NestableDraggableFlatList ────────────────────────
+  const renderAccountItem = useCallback(
+    ({ item: account, drag, isActive }: RenderItemParams<Account>) => (
+      <View style={[s.row, isActive && s.rowDragging]}>
+        {accounts.length > 1 && (
+          <TouchableOpacity
+            onLongPress={drag}
+            delayLongPress={120}
+            style={s.dragHandle}
+          >
+            <Ionicons name="reorder-three-outline" size={18} color="#444" />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity style={s.rowBody} onPress={() => openEditAccount(account)}>
+          <Text style={s.rowLabel}>{account.name}</Text>
+          <View style={s.rowRight}>
+            <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbol)}</Text>
+            <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+          </View>
+        </TouchableOpacity>
+      </View>
+    ),
+    [accounts.length, symbol],
+  );
+
+  const renderCostItem = useCallback(
+    ({ item: cost, drag, isActive }: RenderItemParams<Cost>) => {
+      const paidFromAccount = cost.paidFromAccountId
+        ? accounts.find((a) => a.id === cost.paidFromAccountId)
+        : null;
+      return (
+        <View style={[s.costRow, isActive && s.rowDragging]}>
+          {costs.length > 1 && (
+            <TouchableOpacity onLongPress={drag} delayLongPress={120} style={s.dragHandle}>
+              <Ionicons name="reorder-three-outline" size={18} color="#444" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => tapTickbox(cost)} style={s.checkbox}>
+            <Ionicons
+              name={cost.paid ? 'checkmark-circle' : 'ellipse-outline'}
+              size={22}
+              color={cost.paid ? '#00C896' : '#3A3A3A'}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.costBody} onPress={() => openEditCost(cost)}>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.rowLabel, cost.paid && s.strikethrough]}>{cost.name}</Text>
+              <Text style={s.costMeta}>
+                {cost.paid && paidFromAccount
+                  ? `paid from ${paidFromAccount.name}`
+                  : cost.paid
+                    ? 'paid'
+                    : `due ${ordinal(cost.dueDay)}`}
+              </Text>
+            </View>
+            <Text style={s.rowValue}>{fmt(parseAmt(cost.amount), symbol)}</Text>
+            <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+          </TouchableOpacity>
+        </View>
+      );
+    },
+    [accounts, costs.length, symbol],
+  );
+
+  const deleteAccount = async (account: Account) => {
+    setAccountModal({ visible: false, editing: null });
+    setAccounts((prev) => prev.filter((a) => a.id !== account.id));
+    await removeAccount(account.id);
+    showToast(`Deleted ${account.name}`, {
+      label: 'Undo',
+      onPress: async () => {
+        setAccounts((prev) => [...prev, account]);
+        await persistAccount(account);
       },
-    ]);
+    });
   };
 
-  // --- Costs ---
+  // ── Costs ─────────────────────────────────────────────────────────────────
   const openAddCost = () => {
     setFormName('');
     setFormAmount('');
+    setFormDueDay(String(new Date().getDate()));
     setCostModal({ visible: true, editing: null });
   };
 
   const openEditCost = (cost: Cost) => {
     setFormName(cost.name);
     setFormAmount(cost.amount);
+    setFormDueDay(String(cost.dueDay));
     setCostModal({ visible: true, editing: cost });
   };
 
   const saveCost = async () => {
     if (!formName.trim()) return;
     const editing = costModal.editing;
+    const dueDay = Math.min(31, Math.max(1, parseInt(formDueDay) || 1));
     const cost: Cost = editing
-      ? { ...editing, name: formName.trim(), amount: formAmount }
+      ? { ...editing, name: formName.trim(), amount: formAmount, dueDay }
       : {
           id: newId(),
           name: formName.trim(),
           amount: formAmount,
           paid: false,
           position: costs.length,
+          dueDay,
+          paidFromAccountId: null,
+          paidMonth: null,
         };
-    setCosts(
-      editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost],
-    );
+    setCosts(editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost]);
     setCostModal({ visible: false, editing: null });
     await persistCost(cost);
   };
 
-  const togglePaid = async (id: string) => {
-    const target = costs.find((c) => c.id === id);
-    if (!target) return;
-    const updated: Cost = { ...target, paid: !target.paid };
-    setCosts(costs.map((c) => (c.id === id ? updated : c)));
-    await persistCost(updated);
-  };
-
-  const deleteCost = (id: string) => {
-    Alert.alert('Delete Cost', 'Remove this cost?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          setCosts(costs.filter((c) => c.id !== id));
-          await removeCost(id);
-        },
+  const deleteCost = async (cost: Cost) => {
+    setCostModal({ visible: false, editing: null });
+    setCosts((prev) => prev.filter((c) => c.id !== cost.id));
+    await removeCost(cost.id);
+    showToast(`Deleted ${cost.name}`, {
+      label: 'Undo',
+      onPress: async () => {
+        setCosts((prev) => [...prev, cost]);
+        await persistCost(cost);
       },
-    ]);
+    });
   };
 
+  // ── Add / Remove money flow ───────────────────────────────────────────────
+  const openMoneyFlow = (mode: 'add' | 'remove') => {
+    if (accounts.length === 0) {
+      Alert.alert('No accounts', 'Add a cash account first.');
+      return;
+    }
+    setMoneyAmount('');
+    setMoneyModal({ visible: true, mode });
+  };
+
+  const commitMoney = async (account: Account) => {
+    const amount = parseAmt(moneyAmount);
+    if (amount <= 0) return;
+    const delta = moneyModal.mode === 'add' ? amount : -amount;
+    const updated: Account = {
+      ...account,
+      amount: String(parseAmt(account.amount) + delta),
+    };
+    setAccounts(accounts.map((a) => (a.id === account.id ? updated : a)));
+    setMoneyModal({ visible: false, mode: moneyModal.mode });
+    await persistAccount(updated);
+  };
+
+  // ── Pay / unpay flow ──────────────────────────────────────────────────────
+  const tapTickbox = (cost: Cost) => {
+    if (cost.paid) {
+      // Untick — refund the amount to the account it was paid from (if it still exists)
+      const refundTo = cost.paidFromAccountId
+        ? accounts.find((a) => a.id === cost.paidFromAccountId)
+        : null;
+      if (refundTo) {
+        const updatedAccount: Account = {
+          ...refundTo,
+          amount: String(parseAmt(refundTo.amount) + parseAmt(cost.amount)),
+        };
+        setAccounts(accounts.map((a) => (a.id === updatedAccount.id ? updatedAccount : a)));
+        persistAccount(updatedAccount);
+      }
+      const updated: Cost = { ...cost, paid: false, paidFromAccountId: null, paidMonth: null };
+      setCosts(costs.map((c) => (c.id === cost.id ? updated : c)));
+      persistCost(updated);
+      return;
+    }
+    // Not paid yet — ask which account to pay with
+    if (accounts.length === 0) {
+      Alert.alert('No accounts', 'Add a cash account first so you can pay this cost.');
+      return;
+    }
+    setAccountPicker({ visible: true, cost });
+  };
+
+  const payFromAccount = async (account: Account) => {
+    const cost = accountPicker.cost;
+    if (!cost) return;
+    const updatedAccount: Account = {
+      ...account,
+      amount: String(parseAmt(account.amount) - parseAmt(cost.amount)),
+    };
+    const updatedCost: Cost = {
+      ...cost,
+      paid: true,
+      paidFromAccountId: account.id,
+      paidMonth: currentMonthKey(),
+    };
+    setAccounts(accounts.map((a) => (a.id === account.id ? updatedAccount : a)));
+    setCosts(costs.map((c) => (c.id === cost.id ? updatedCost : c)));
+    setAccountPicker({ visible: false, cost: null });
+    await Promise.all([persistAccount(updatedAccount), persistCost(updatedCost)]);
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={s.container}>
       <View style={s.header}>
         <Text style={s.headerTitle}>DASHBOARD</Text>
+        <View style={s.headerActions}>
+          <TouchableOpacity style={s.headerRemoveBtn} onPress={() => openMoneyFlow('remove')}>
+            <Ionicons name="remove" size={20} color="#FF6B6B" />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.headerAddBtn} onPress={() => openMoneyFlow('add')}>
+            <Ionicons name="add" size={20} color="#00C896" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {/* Hero card */}
+      <SortableScroll contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        {/* Hero */}
         <View style={s.heroCard}>
-          <Text style={s.heroLabel}>TOTAL LIQUID CASH</Text>
-          <Text style={s.heroAmount}>{fmt(totalLiquid, symbol)}</Text>
+          <Text style={s.heroLabel}>AFTER MONTHLY PAYMENTS</Text>
+          <Text style={s.heroAmount}>{fmt(afterPayments, symbol)}</Text>
           <View style={s.heroDivider} />
           <View style={s.heroRow}>
-            <Text style={s.heroSubLabel}>After monthly costs</Text>
-            <Text style={[s.heroSubValue, remaining < 0 && s.negative]}>
-              {fmt(remaining, symbol)}
-            </Text>
+            <Text style={s.heroSubLabel}>Current liquidity</Text>
+            <Text style={s.heroSubValue}>{fmt(totalLiquid, symbol)}</Text>
           </View>
         </View>
 
@@ -217,9 +432,6 @@ export default function Dashboard() {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <Text style={s.cardTitle}>Cash Accounts</Text>
-            <TouchableOpacity style={s.iconBtn} onPress={openAddAccount}>
-              <Ionicons name="add" size={18} color="#00C896" />
-            </TouchableOpacity>
           </View>
 
           {accounts.length === 0 ? (
@@ -228,20 +440,49 @@ export default function Dashboard() {
               <Text style={s.emptyText}>Add your first account</Text>
             </TouchableOpacity>
           ) : (
-            accounts.map((account) => (
-              <TouchableOpacity
-                key={account.id}
-                style={s.row}
-                onPress={() => openEditAccount(account)}
-                onLongPress={() => deleteAccount(account.id)}
-              >
-                <Text style={s.rowLabel}>{account.name}</Text>
-                <View style={s.rowRight}>
-                  <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbol)}</Text>
-                  <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
-                </View>
+            <>
+              {Platform.OS === 'web' ? (
+                accounts.map((account) => {
+                  const d = accountDrag(account.id);
+                  return (
+                    <DraggableRow
+                      key={account.id}
+                      handlers={{ ...d, draggable: d.draggable && accounts.length > 1 }}
+                      style={[
+                        s.row,
+                        d.isDragging && s.rowDragging,
+                        d.isHovered && s.rowDropTarget,
+                      ]}
+                    >
+                      {accounts.length > 1 && (
+                        <View style={s.dragHandle}>
+                          <Ionicons name="reorder-three-outline" size={18} color="#444" />
+                        </View>
+                      )}
+                      <TouchableOpacity style={s.rowBody} onPress={() => openEditAccount(account)}>
+                        <Text style={s.rowLabel}>{account.name}</Text>
+                        <View style={s.rowRight}>
+                          <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbol)}</Text>
+                          <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+                        </View>
+                      </TouchableOpacity>
+                    </DraggableRow>
+                  );
+                })
+              ) : (
+                <NestableDraggableFlatList
+                  data={accounts}
+                  keyExtractor={(a) => a.id}
+                  renderItem={renderAccountItem}
+                  onDragEnd={({ data }) => reorderAccounts(data)}
+                  activationDistance={5}
+                />
+              )}
+              <TouchableOpacity style={s.addCostRow} onPress={openAddAccount}>
+                <Ionicons name="add-circle-outline" size={16} color="#00C896" />
+                <Text style={s.addCostText}>Add Account</Text>
               </TouchableOpacity>
-            ))
+            </>
           )}
         </View>
 
@@ -254,7 +495,9 @@ export default function Dashboard() {
           >
             <View>
               <Text style={s.cardTitle}>Monthly Costs</Text>
-              <Text style={s.cardSubtitle}>{fmt(totalCosts, symbol)}</Text>
+              <Text style={s.cardSubtitle}>
+                {fmt(unpaidCosts, symbol)} unpaid · {fmt(costs.reduce((s, c) => s + parseAmt(c.amount), 0), symbol)} total
+              </Text>
             </View>
             <Ionicons
               name={costsExpanded ? 'chevron-up' : 'chevron-down'}
@@ -270,25 +513,59 @@ export default function Dashboard() {
                   <Ionicons name="receipt-outline" size={26} color="#333" />
                   <Text style={s.emptyText}>Add a monthly cost</Text>
                 </TouchableOpacity>
+              ) : Platform.OS === 'web' ? (
+                costs.map((cost) => {
+                  const paidFromAccount = cost.paidFromAccountId
+                    ? accounts.find((a) => a.id === cost.paidFromAccountId)
+                    : null;
+                  const d = costDrag(cost.id);
+                  return (
+                    <DraggableRow
+                      key={cost.id}
+                      handlers={{ ...d, draggable: d.draggable && costs.length > 1 }}
+                      style={[
+                        s.costRow,
+                        d.isDragging && s.rowDragging,
+                        d.isHovered && s.rowDropTarget,
+                      ]}
+                    >
+                      {costs.length > 1 && Platform.OS === 'web' && (
+                        <View style={s.dragHandle}>
+                          <Ionicons name="reorder-three-outline" size={18} color="#444" />
+                        </View>
+                      )}
+                      <TouchableOpacity onPress={() => tapTickbox(cost)} style={s.checkbox}>
+                        <Ionicons
+                          name={cost.paid ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={22}
+                          color={cost.paid ? '#00C896' : '#3A3A3A'}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={s.costBody} onPress={() => openEditCost(cost)}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[s.rowLabel, cost.paid && s.strikethrough]}>{cost.name}</Text>
+                          <Text style={s.costMeta}>
+                            {cost.paid && paidFromAccount
+                              ? `paid from ${paidFromAccount.name}`
+                              : cost.paid
+                                ? 'paid'
+                                : `due ${ordinal(cost.dueDay)}`}
+                          </Text>
+                        </View>
+                        <Text style={s.rowValue}>{fmt(parseAmt(cost.amount), symbol)}</Text>
+                        <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+                      </TouchableOpacity>
+                    </DraggableRow>
+                  );
+                })
               ) : (
-                costs.map((cost) => (
-                  <TouchableOpacity
-                    key={cost.id}
-                    style={s.row}
-                    onPress={() => openEditCost(cost)}
-                    onLongPress={() => deleteCost(cost.id)}
-                  >
-                    <TouchableOpacity onPress={() => togglePaid(cost.id)} style={s.checkbox}>
-                      <Ionicons
-                        name={cost.paid ? 'checkmark-circle' : 'ellipse-outline'}
-                        size={22}
-                        color={cost.paid ? '#00C896' : '#3A3A3A'}
-                      />
-                    </TouchableOpacity>
-                    <Text style={[s.rowLabel, cost.paid && s.strikethrough]}>{cost.name}</Text>
-                    <Text style={s.rowValue}>{fmt(parseAmt(cost.amount), symbol)}</Text>
-                  </TouchableOpacity>
-                ))
+                <NestableDraggableFlatList
+                  data={costs}
+                  keyExtractor={(c) => c.id}
+                  renderItem={renderCostItem}
+                  onDragEnd={({ data }) => reorderCosts(data)}
+                  activationDistance={5}
+                />
               )}
               <TouchableOpacity style={s.addCostRow} onPress={openAddCost}>
                 <Ionicons name="add-circle-outline" size={16} color="#00C896" />
@@ -299,7 +576,7 @@ export default function Dashboard() {
         </View>
 
         <View style={{ height: 40 }} />
-      </ScrollView>
+      </SortableScroll>
 
       {/* Account Modal */}
       <Modal visible={accountModal.visible} transparent animationType="slide">
@@ -338,6 +615,15 @@ export default function Dashboard() {
                   <Text style={s.btnSaveText}>Save</Text>
                 </TouchableOpacity>
               </View>
+              {accountModal.editing && (
+                <TouchableOpacity
+                  style={s.deleteLink}
+                  onPress={() => deleteAccount(accountModal.editing!)}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+                  <Text style={s.deleteLinkText}>Delete account</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -360,15 +646,31 @@ export default function Dashboard() {
                 placeholderTextColor="#444"
                 autoFocus
               />
-              <Text style={s.inputLabel}>Monthly Amount ({currency})</Text>
-              <TextInput
-                style={s.input}
-                value={formAmount}
-                onChangeText={setFormAmount}
-                placeholder="0.00"
-                placeholderTextColor="#444"
-                keyboardType="decimal-pad"
-              />
+              <View style={s.row2col}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.inputLabel}>Amount ({currency})</Text>
+                  <TextInput
+                    style={s.input}
+                    value={formAmount}
+                    onChangeText={setFormAmount}
+                    placeholder="0.00"
+                    placeholderTextColor="#444"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={{ width: 110 }}>
+                  <Text style={s.inputLabel}>Due day</Text>
+                  <TextInput
+                    style={s.input}
+                    value={formDueDay}
+                    onChangeText={setFormDueDay}
+                    placeholder="15"
+                    placeholderTextColor="#444"
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                </View>
+              </View>
               <View style={s.sheetActions}>
                 <TouchableOpacity
                   style={s.btnCancel}
@@ -380,9 +682,128 @@ export default function Dashboard() {
                   <Text style={s.btnSaveText}>Save</Text>
                 </TouchableOpacity>
               </View>
+              {costModal.editing && (
+                <TouchableOpacity
+                  style={s.deleteLink}
+                  onPress={() => deleteCost(costModal.editing!)}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+                  <Text style={s.deleteLinkText}>Delete cost</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Add / remove money sheet */}
+      <Modal visible={moneyModal.visible} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={s.overlay}>
+            <View style={s.sheet}>
+              <Text style={s.sheetTitle}>
+                {moneyModal.mode === 'add' ? 'Add money' : 'Remove money'}
+              </Text>
+              <Text style={s.inputLabel}>Amount ({currency})</Text>
+              <TextInput
+                style={s.input}
+                value={moneyAmount}
+                onChangeText={setMoneyAmount}
+                placeholder="0.00"
+                placeholderTextColor="#444"
+                keyboardType="decimal-pad"
+                autoFocus
+              />
+              <Text style={s.pickerSub}>
+                {parseAmt(moneyAmount) > 0
+                  ? moneyModal.mode === 'add'
+                    ? 'Tap an account to add this to it.'
+                    : 'Tap an account to remove from.'
+                  : 'Enter an amount, then pick an account.'}
+              </Text>
+              {accounts.map((account, i) => {
+                const amount = parseAmt(moneyAmount);
+                const delta = moneyModal.mode === 'add' ? amount : -amount;
+                const newBalance = parseAmt(account.amount) + delta;
+                const goesNegative = newBalance < 0;
+                const disabled = amount <= 0;
+                const isAdd = moneyModal.mode === 'add';
+                return (
+                  <TouchableOpacity
+                    key={account.id}
+                    style={[
+                      s.pickerRow,
+                      i > 0 && { borderTopWidth: 1, borderTopColor: '#222' },
+                      disabled && { opacity: 0.4 },
+                    ]}
+                    onPress={() => commitMoney(account)}
+                    disabled={disabled}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.pickerName}>{account.name}</Text>
+                      <Text style={[s.pickerBalance, goesNegative && s.pickerNegative]}>
+                        {fmt(parseAmt(account.amount), symbol)} → {fmt(newBalance, symbol)}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name={isAdd ? 'add-circle-outline' : 'remove-circle-outline'}
+                      size={18}
+                      color={isAdd ? '#00C896' : '#FF6B6B'}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={s.btnCancel}
+                onPress={() => setMoneyModal({ visible: false, mode: moneyModal.mode })}
+              >
+                <Text style={s.btnCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Account picker — "what did you pay with?" */}
+      <Modal visible={accountPicker.visible} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>What did you pay with?</Text>
+            {accountPicker.cost && (
+              <Text style={s.pickerSub}>
+                Paying {fmt(parseAmt(accountPicker.cost.amount), symbol)} for{' '}
+                <Text style={{ color: '#FFF', fontWeight: '600' }}>{accountPicker.cost.name}</Text>
+              </Text>
+            )}
+            {accounts.map((account, i) => {
+              const newBalance = accountPicker.cost
+                ? parseAmt(account.amount) - parseAmt(accountPicker.cost.amount)
+                : parseAmt(account.amount);
+              const goesNegative = newBalance < 0;
+              return (
+                <TouchableOpacity
+                  key={account.id}
+                  style={[s.pickerRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#222' }]}
+                  onPress={() => payFromAccount(account)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.pickerName}>{account.name}</Text>
+                    <Text style={[s.pickerBalance, goesNegative && s.pickerNegative]}>
+                      {fmt(parseAmt(account.amount), symbol)} → {fmt(newBalance, symbol)}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#444" />
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={s.btnCancel}
+              onPress={() => setAccountPicker({ visible: false, cost: null })}
+            >
+              <Text style={s.btnCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -393,10 +814,32 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  headerAddBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0D1F1A',
+    borderWidth: 1,
+    borderColor: '#1F3A30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRemoveBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1F0D0D',
+    borderWidth: 1,
+    borderColor: '#3A1818',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scroll: { paddingHorizontal: 16 },
   heroCard: {
     backgroundColor: '#151515',
@@ -407,12 +850,12 @@ const s = StyleSheet.create({
     borderColor: '#222',
   },
   heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5, marginBottom: 10 },
-  heroAmount: { fontSize: 38, fontWeight: '700', color: '#FFF', letterSpacing: -1 },
+  heroAmount: { fontSize: 38, fontWeight: '700', color: '#00C896', letterSpacing: -1 },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroSubLabel: { fontSize: 13, color: '#555' },
-  heroSubValue: { fontSize: 17, fontWeight: '600', color: '#00C896' },
-  negative: { color: '#FF4C4C' },
+  heroSubValue: { fontSize: 17, fontWeight: '600', color: '#AAA' },
+
   card: {
     backgroundColor: '#151515',
     borderRadius: 16,
@@ -442,15 +885,44 @@ const s = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingLeft: 8,
+    paddingRight: 18,
+    paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: '#1C1C1C',
   },
+  rowBody: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  costRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 8,
+    paddingRight: 18,
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#1C1C1C',
+    gap: 8,
+  },
+  costBody: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  dragHandle: {
+    width: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // @ts-ignore — web-only cursor hint
+    cursor: 'grab',
+  },
+  rowDragging: { opacity: 0.35 },
+  rowDropTarget: { borderTopWidth: 2, borderTopColor: '#00C896' },
   rowLabel: { flex: 1, fontSize: 15, color: '#EEE', fontWeight: '400' },
   rowRight: { flexDirection: 'row', alignItems: 'center' },
   rowValue: { fontSize: 14, color: '#888' },
-  checkbox: { marginRight: 12 },
+  costMeta: { fontSize: 11, color: '#555', marginTop: 2 },
+  checkbox: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   strikethrough: { color: '#444', textDecorationLine: 'line-through' },
   empty: {
     alignItems: 'center',
@@ -469,6 +941,8 @@ const s = StyleSheet.create({
     borderTopColor: '#1C1C1C',
   },
   addCostText: { fontSize: 14, color: '#00C896', fontWeight: '500' },
+
+  // Sheets
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#1A1A1A',
@@ -480,7 +954,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 0,
     borderColor: '#2C2C2C',
   },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 24 },
+  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 16 },
   inputLabel: {
     fontSize: 11,
     fontWeight: '600',
@@ -500,6 +974,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2C2C2C',
   },
+  row2col: { flexDirection: 'row', gap: 12 },
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {
     flex: 1,
@@ -507,6 +982,7 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#222',
     alignItems: 'center',
+    marginTop: 8,
   },
   btnCancelText: { fontSize: 15, color: '#666', fontWeight: '500' },
   btnSave: {
@@ -517,4 +993,27 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
+
+  // Delete link inside edit modals
+  deleteLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  deleteLinkText: { fontSize: 13, color: '#FF6B6B', fontWeight: '500' },
+
+  // Picker
+  pickerSub: { fontSize: 13, color: '#666', marginBottom: 18, lineHeight: 18 },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  pickerName: { fontSize: 15, fontWeight: '600', color: '#FFF' },
+  pickerBalance: { fontSize: 12, color: '#555', marginTop: 3 },
+  pickerNegative: { color: '#FF6B6B' },
 });

@@ -1,10 +1,11 @@
 import { supabase } from './supabase';
 import { load, save } from './storage';
+import { reportable } from './sync';
 
 const NS = 'currency';
 const DEFAULT_CURRENCY = 'RON';
 
-export type PageKey = 'dashboard' | 'investments' | 'revenue';
+export type PageKey = 'dashboard' | 'investments' | 'savings' | 'revenue' | 'debts';
 
 export interface CurrencySettings {
   global: string;
@@ -27,14 +28,16 @@ async function fromRemote(): Promise<CurrencySettings | null> {
   if (!uid) return null;
   const { data, error } = await supabase
     .from('user_settings')
-    .select('currency, dashboard_currency, investments_currency, revenue_currency')
+    .select('currency, dashboard_currency, investments_currency, savings_currency, revenue_currency, debts_currency')
     .eq('user_id', uid)
     .maybeSingle();
   if (error || !data) return null;
   const overrides: Partial<Record<PageKey, string>> = {};
   if (data.dashboard_currency) overrides.dashboard = data.dashboard_currency;
   if (data.investments_currency) overrides.investments = data.investments_currency;
+  if (data.savings_currency) overrides.savings = data.savings_currency;
   if (data.revenue_currency) overrides.revenue = data.revenue_currency;
+  if (data.debts_currency) overrides.debts = data.debts_currency;
   return { global: data.currency ?? DEFAULT_CURRENCY, overrides };
 }
 
@@ -71,9 +74,11 @@ export async function saveGlobalCurrency(code: string): Promise<void> {
   await save(NS, updated);
   const uid = await userId();
   if (!uid) return;
-  await supabase
-    .from('user_settings')
-    .upsert({ user_id: uid, currency: code }, { onConflict: 'user_id' });
+  await reportable(
+    supabase
+      .from('user_settings')
+      .upsert({ user_id: uid, currency: code }, { onConflict: 'user_id' }),
+  );
 }
 
 // Set or clear an override for one page (pass null to clear → page falls back to global).
@@ -89,9 +94,11 @@ export async function saveOverrideCurrency(
   await save(NS, updated);
   const uid = await userId();
   if (!uid) return;
-  await supabase
-    .from('user_settings')
-    .upsert({ user_id: uid, [columnFor(page)]: code }, { onConflict: 'user_id' });
+  await reportable(
+    supabase
+      .from('user_settings')
+      .upsert({ user_id: uid, [columnFor(page)]: code }, { onConflict: 'user_id' }),
+  );
 }
 
 // ── Backward-compat aliases ─────────────────────────────────────────────────

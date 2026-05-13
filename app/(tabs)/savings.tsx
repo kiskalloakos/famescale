@@ -15,11 +15,11 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import {
-  InvestmentData,
-  getInvestments,
-  refreshInvestments,
-  saveInvestments,
-} from '../../lib/investments';
+  SavingsData,
+  getSavings,
+  refreshSavings,
+  saveSavings,
+} from '../../lib/savings';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -52,17 +52,16 @@ function fmtFull(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export default function Investments() {
-  const [data, setData] = useState<InvestmentData>({
+export default function Savings() {
+  const [data, setData] = useState<SavingsData>({
     totalInvested: '',
     startMonth: String(new Date().getMonth() + 1),
     startYear: String(new Date().getFullYear()),
-    annualReturn: '7',
+    annualReturn: '5',
   });
   const [currency, setCurrency] = useState('RON');
   const [yearlyExpanded, setYearlyExpanded] = useState(false);
 
-  // Tap-to-edit modal for the whole portfolio (total + start date + rate)
   const [editVisible, setEditVisible] = useState(false);
   const [formTotal, setFormTotal] = useState('');
   const [formMonth, setFormMonth] = useState('');
@@ -72,16 +71,16 @@ export default function Investments() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      getInvestments().then((d) => {
+      getSavings().then((d) => {
         if (!cancelled) setData(d);
       });
-      refreshInvestments().then((d) => {
+      refreshSavings().then((d) => {
         if (!cancelled) setData(d);
       });
-      getCurrencyForPage('investments').then((c) => {
+      getCurrencyForPage('savings').then((c) => {
         if (!cancelled) setCurrency(c);
       });
-      refreshCurrencyForPage('investments').then((c) => {
+      refreshCurrencyForPage('savings').then((c) => {
         if (!cancelled) setCurrency(c);
       });
       return () => {
@@ -120,27 +119,26 @@ export default function Investments() {
   };
 
   const saveEdit = async () => {
-    const next: InvestmentData = {
+    const next: SavingsData = {
       totalInvested: formTotal,
       startMonth: formMonth || '1',
       startYear: formYear || String(new Date().getFullYear()),
-      annualReturn: formReturn || '7',
+      annualReturn: formReturn || '5',
     };
     setData(next);
-    await saveInvestments(next);
+    await saveSavings(next);
     setEditVisible(false);
   };
 
   return (
     <SafeAreaView style={s.container}>
       <View style={s.header}>
-        <Text style={s.headerTitle}>INVESTMENTS</Text>
+        <Text style={s.headerTitle}>SAVINGS</Text>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {/* Hero — big green total, tap to edit */}
         <TouchableOpacity style={s.heroCard} onPress={openEdit} activeOpacity={0.85}>
-          <Text style={s.heroLabel}>TOTAL INVESTED</Text>
+          <Text style={s.heroLabel}>TOTAL SAVED</Text>
           <Text style={s.heroAmount}>{fmt(pv, symbol)}</Text>
           {pv > 0 ? (
             <>
@@ -150,16 +148,15 @@ export default function Investments() {
                 <Text style={s.heroSubValue}>{fmtFull(pmt, symbol)}</Text>
               </View>
               <View style={[s.heroRow, { marginTop: 6 }]}>
-                <Text style={s.heroSubLabel}>Since {startLabel} · {data.annualReturn || '7'}%</Text>
+                <Text style={s.heroSubLabel}>Since {startLabel} · {data.annualReturn || '5'}%</Text>
                 <Text style={s.heroSubMeta}>tap to edit</Text>
               </View>
             </>
           ) : (
-            <Text style={s.heroEmpty}>Tap to set up your portfolio</Text>
+            <Text style={s.heroEmpty}>Tap to set up your savings</Text>
           )}
         </TouchableOpacity>
 
-        {/* 1yr / 5yr / 10yr projections */}
         {pv > 0 && (
           <View style={s.projRow}>
             {[
@@ -176,7 +173,6 @@ export default function Investments() {
           </View>
         )}
 
-        {/* Yearly breakdown */}
         {pv > 0 && (
           <View style={s.card}>
             <TouchableOpacity
@@ -216,7 +212,6 @@ export default function Investments() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Edit modal — total + start date + return rate */}
       <Modal visible={editVisible} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -224,13 +219,13 @@ export default function Investments() {
         >
           <View style={s.overlay}>
             <View style={s.sheet}>
-              <Text style={s.sheetTitle}>Update portfolio</Text>
+              <Text style={s.sheetTitle}>Update savings</Text>
 
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
               >
-                <Text style={s.label}>TOTAL CURRENTLY INVESTED</Text>
+                <Text style={s.label}>TOTAL CURRENTLY SAVED</Text>
                 <TextInput
                   style={s.input}
                   value={formTotal}
@@ -241,7 +236,7 @@ export default function Investments() {
                   autoFocus
                 />
 
-                <Text style={s.label}>STARTED INVESTING</Text>
+                <Text style={s.label}>STARTED SAVING</Text>
                 <View style={s.monthGrid}>
                   {MONTH_LABELS.map((m, i) => {
                     const active = formMonth === String(i + 1);
@@ -271,11 +266,11 @@ export default function Investments() {
                   style={s.input}
                   value={formReturn}
                   onChangeText={setFormReturn}
-                  placeholder="7"
+                  placeholder="5"
                   placeholderTextColor="#3A3A3A"
                   keyboardType="decimal-pad"
                 />
-                <Text style={s.hint}>7% is recommended for most stock market investments</Text>
+                <Text style={s.hint}>5% is typical for high-yield savings accounts</Text>
               </ScrollView>
 
               <View style={s.sheetActions}>
@@ -300,7 +295,6 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
   scroll: { paddingHorizontal: 16 },
 
-  // Hero (mirrors Dashboard pattern: big green amount, sub-info, divider)
   heroCard: {
     backgroundColor: '#151515',
     borderRadius: 20,
@@ -324,7 +318,6 @@ const s = StyleSheet.create({
   heroSubMeta: { fontSize: 11, color: '#444' },
   heroEmpty: { fontSize: 13, color: '#444', marginTop: 12 },
 
-  // Projection cards
   projRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   projCard: {
     flex: 1,
@@ -336,16 +329,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   projLabel: { fontSize: 9, fontWeight: '700', color: '#555', letterSpacing: 1, marginBottom: 8 },
-  projValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFF',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
+  projValue: { fontSize: 14, fontWeight: '700', color: '#FFF', marginBottom: 4, textAlign: 'center' },
   projGain: { fontSize: 11, color: '#00C896', fontWeight: '500' },
 
-  // Yearly breakdown
   card: {
     backgroundColor: '#151515',
     borderRadius: 16,
@@ -361,11 +347,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 18,
   },
-  tableHeaderRow: {
-    borderTopWidth: 1,
-    borderTopColor: '#1C1C1C',
-    backgroundColor: '#111',
-  },
+  tableHeaderRow: { borderTopWidth: 1, borderTopColor: '#1C1C1C', backgroundColor: '#111' },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -382,7 +364,6 @@ const s = StyleSheet.create({
   greenText: { color: '#00C896', fontWeight: '500' },
   boldText: { color: '#EEE', fontWeight: '600' },
 
-  // Modal
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#1A1A1A',
@@ -397,13 +378,7 @@ const s = StyleSheet.create({
   },
   sheetTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 20 },
 
-  label: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#555',
-    letterSpacing: 1.2,
-    marginBottom: 8,
-  },
+  label: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.2, marginBottom: 8 },
   input: {
     backgroundColor: '#222',
     borderRadius: 10,

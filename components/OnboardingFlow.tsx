@@ -1,24 +1,89 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { saveSetup } from '../lib/setup';
+import { saveGlobalCurrency } from '../lib/currency';
 
-// Re-exported for screens that still import { SetupData } from this file.
 export type { SetupData } from '../lib/setup';
 
 interface Props {
   onComplete: () => void;
 }
 
-type TabChoice = 'Investments' | 'Savings';
+type TrackKey = 'showInvestments' | 'showSavings' | 'showRevenue' | 'showDebts' | 'showNetWorth';
+
+const CURRENCIES = [
+  { code: 'RON', symbol: 'lei', name: 'Romanian Leu' },
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
+  { code: 'EUR', symbol: '€', name: 'Euro' },
+  { code: 'GBP', symbol: '£', name: 'British Pound' },
+  { code: 'HUF', symbol: 'Ft', name: 'Hungarian Forint' },
+  { code: 'CHF', symbol: 'Fr', name: 'Swiss Franc' },
+];
+
+const TRACKABLES: {
+  key: TrackKey;
+  title: string;
+  desc: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+  {
+    key: 'showInvestments',
+    title: 'Investments',
+    desc: 'Portfolio growth with compound returns.',
+    icon: 'trending-up-outline',
+  },
+  {
+    key: 'showSavings',
+    title: 'Savings',
+    desc: 'Savings goals and interest over time.',
+    icon: 'wallet-outline',
+  },
+  {
+    key: 'showRevenue',
+    title: 'Revenue',
+    desc: 'Yearly income with monthly breakdown.',
+    icon: 'bar-chart-outline',
+  },
+  {
+    key: 'showDebts',
+    title: 'Debts',
+    desc: 'What you owe — loans, cards, IOUs.',
+    icon: 'document-text-outline',
+  },
+  {
+    key: 'showNetWorth',
+    title: 'Net Worth',
+    desc: 'Cash + investments − debts in one number.',
+    icon: 'pulse-outline',
+  },
+];
 
 export default function OnboardingFlow({ onComplete }: Props) {
   const [step, setStep] = useState(0);
-  const [tabChoice, setTabChoice] = useState<TabChoice>('Investments');
+  const [currency, setCurrency] = useState('RON');
+  const [tracks, setTracks] = useState<Record<TrackKey, boolean>>({
+    showInvestments: true,
+    showSavings: false,
+    showRevenue: false,
+    showDebts: false,
+    showNetWorth: false,
+  });
 
-  const finish = async (showRevenue: boolean) => {
-    await saveSetup({ completed: true, investmentTabName: tabChoice, showRevenue });
+  const toggle = (key: TrackKey) => setTracks((t) => ({ ...t, [key]: !t[key] }));
+
+  const finish = async () => {
+    await saveGlobalCurrency(currency);
+    await saveSetup({
+      completed: true,
+      showInvestments: tracks.showInvestments,
+      showSavings: tracks.showSavings,
+      showRevenue: tracks.showRevenue,
+      showDebts: tracks.showDebts,
+      showNetWorth: tracks.showNetWorth,
+      includeDebtsInNetWorth: true,
+    });
     onComplete();
   };
 
@@ -39,7 +104,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
     );
   }
 
-  // ── Step 1: Investments vs Savings ─────────────────────────────────────────
+  // ── Step 1: Currency ───────────────────────────────────────────────────────
   if (step === 1) {
     return (
       <SafeAreaView style={s.container}>
@@ -51,29 +116,30 @@ export default function OnboardingFlow({ onComplete }: Props) {
         </View>
 
         <View style={s.content}>
-          <Text style={s.question}>How would you like to{'\n'}track your growth?</Text>
-
-          {(['Investments', 'Savings'] as TabChoice[]).map((choice) => {
-            const active = tabChoice === choice;
-            return (
-              <TouchableOpacity
-                key={choice}
-                style={[s.choiceCard, active && s.choiceCardActive]}
-                onPress={() => setTabChoice(choice)}
-                activeOpacity={0.75}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.choiceTitle, active && s.choiceTextActive]}>{choice}</Text>
-                  <Text style={s.choiceDesc}>
-                    {choice === 'Investments'
-                      ? 'Track portfolio growth with compound returns'
-                      : 'Track savings goals and accumulation'}
-                  </Text>
-                </View>
-                {active && <Ionicons name="checkmark-circle" size={20} color="#00C896" />}
-              </TouchableOpacity>
-            );
-          })}
+          <Text style={s.question}>What's your{'\n'}main currency?</Text>
+          <Text style={s.questionSub}>
+            You can override this per page later in Settings.
+          </Text>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {CURRENCIES.map((c) => {
+              const active = currency === c.code;
+              return (
+                <TouchableOpacity
+                  key={c.code}
+                  style={[s.currencyRow, active && s.currencyRowActive]}
+                  onPress={() => setCurrency(c.code)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={s.currencySymbol}>{c.symbol}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.currencyCode, active && s.choiceTextActive]}>{c.code}</Text>
+                    <Text style={s.currencyName}>{c.name}</Text>
+                  </View>
+                  {active && <Ionicons name="checkmark-circle" size={20} color="#00C896" />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
 
         <View style={s.footer}>
@@ -85,7 +151,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
     );
   }
 
-  // ── Step 2: Revenue (optional) ─────────────────────────────────────────────
+  // ── Step 2: What do you want to track? (multi-select) ──────────────────────
   return (
     <SafeAreaView style={s.container}>
       <View style={s.topBar}>
@@ -96,18 +162,52 @@ export default function OnboardingFlow({ onComplete }: Props) {
       </View>
 
       <View style={s.content}>
-        <Text style={s.question}>Would you like to track{'\n'}your income too?</Text>
+        <Text style={s.question}>What do you want{'\n'}to track?</Text>
         <Text style={s.questionSub}>
-          Adds a Revenue tab — optional, you can change this later.
+          Dashboard is always included. Pick anything else you want — you can change this later in Settings.
         </Text>
+
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Dashboard — locked-in, shown for clarity */}
+          <View style={[s.choiceCard, s.choiceCardLocked]}>
+            <View style={s.choiceIcon}>
+              <Ionicons name="home-outline" size={18} color="#00C896" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.choiceTitle, s.choiceTextActive]}>Dashboard</Text>
+              <Text style={s.choiceDesc}>Cash accounts and monthly costs. Always on.</Text>
+            </View>
+            <Text style={s.lockedTag}>INCLUDED</Text>
+          </View>
+
+          {TRACKABLES.map((t) => {
+            const active = tracks[t.key];
+            return (
+              <TouchableOpacity
+                key={t.key}
+                style={[s.choiceCard, active && s.choiceCardActive]}
+                onPress={() => toggle(t.key)}
+                activeOpacity={0.75}
+              >
+                <View style={s.choiceIcon}>
+                  <Ionicons name={t.icon} size={18} color={active ? '#00C896' : '#555'} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.choiceTitle, active && s.choiceTextActive]}>{t.title}</Text>
+                  <Text style={s.choiceDesc}>{t.desc}</Text>
+                </View>
+                <View style={[s.checkbox, active && s.checkboxActive]}>
+                  {active && <Ionicons name="checkmark" size={14} color="#000" />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <View style={s.footer}>
-        <TouchableOpacity style={s.primaryBtn} onPress={() => finish(true)}>
-          <Text style={s.primaryBtnText}>Yes, track my income</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.skipBtn} onPress={() => finish(false)}>
-          <Text style={s.skipBtnText}>Skip for now</Text>
+        <TouchableOpacity style={s.primaryBtn} onPress={finish}>
+          <Text style={s.primaryBtnText}>Done</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -117,7 +217,6 @@ export default function OnboardingFlow({ onComplete }: Props) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
 
-  // Welcome
   welcomeContent: {
     flex: 1,
     alignItems: 'center',
@@ -133,7 +232,6 @@ const s = StyleSheet.create({
   },
   tagline: { fontSize: 16, color: '#444', fontWeight: '400' },
 
-  // Step header
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -145,7 +243,6 @@ const s = StyleSheet.create({
   backBtn: { padding: 4 },
   stepDot: { fontSize: 12, color: '#333', fontWeight: '500' },
 
-  // Content
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 40 },
   question: {
     fontSize: 28,
@@ -158,26 +255,69 @@ const s = StyleSheet.create({
     fontSize: 14,
     color: '#444',
     lineHeight: 20,
-    marginBottom: 32,
+    marginBottom: 24,
   },
 
-  // Choice cards
+  // Track-selection cards
   choiceCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#151515',
     borderRadius: 14,
-    padding: 18,
+    padding: 16,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#222',
+    gap: 14,
   },
   choiceCardActive: { borderColor: '#00C896', backgroundColor: '#0D1F1A' },
-  choiceTitle: { fontSize: 16, fontWeight: '600', color: '#888', marginBottom: 4 },
+  choiceCardLocked: { borderColor: '#1F3A30', backgroundColor: '#0D1F1A' },
+  choiceIcon: { width: 28, alignItems: 'center' },
+  choiceTitle: { fontSize: 15, fontWeight: '600', color: '#888', marginBottom: 3 },
   choiceTextActive: { color: '#00C896' },
-  choiceDesc: { fontSize: 13, color: '#3A3A3A', lineHeight: 18 },
+  choiceDesc: { fontSize: 12, color: '#3A3A3A', lineHeight: 16 },
 
-  // Footer buttons
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#2A2A2A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: { backgroundColor: '#00C896', borderColor: '#00C896' },
+
+  lockedTag: {
+    fontSize: 9,
+    color: '#00C896',
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1F3A30',
+  },
+
+  // Currency rows (unchanged)
+  currencyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#151515',
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#222',
+  },
+  currencyRowActive: { borderColor: '#00C896', backgroundColor: '#0D1F1A' },
+  currencySymbol: { fontSize: 22, color: '#FFF', width: 32, textAlign: 'center' },
+  currencyCode: { fontSize: 15, fontWeight: '600', color: '#FFF', marginBottom: 2 },
+  currencyName: { fontSize: 12, color: '#555' },
+
   footer: { paddingHorizontal: 24, paddingBottom: 32, gap: 12 },
   primaryBtn: {
     backgroundColor: '#00C896',
@@ -186,6 +326,4 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
-  skipBtn: { alignItems: 'center', paddingVertical: 10 },
-  skipBtnText: { fontSize: 14, color: '#333', fontWeight: '500' },
 });
