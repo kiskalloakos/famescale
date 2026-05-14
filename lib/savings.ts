@@ -7,6 +7,7 @@ export interface SavingsData {
   startMonth: string;
   startYear: string;
   annualReturn: string;
+  showProjections: boolean;
 }
 
 const NS = 'savings';
@@ -16,6 +17,7 @@ const DEFAULT: SavingsData = {
   startMonth: String(new Date().getMonth() + 1),
   startYear: String(new Date().getFullYear()),
   annualReturn: '5',
+  showProjections: false,
 };
 
 async function userId(): Promise<string | null> {
@@ -32,7 +34,7 @@ export async function refreshSavings(): Promise<SavingsData> {
   if (!uid) return getSavings();
   const { data, error } = await supabase
     .from('savings_setup')
-    .select('total_invested, start_month, start_year, annual_return')
+    .select('total_invested, start_month, start_year, annual_return, show_projections')
     .eq('user_id', uid)
     .maybeSingle();
   if (error || !data) return getSavings();
@@ -41,6 +43,7 @@ export async function refreshSavings(): Promise<SavingsData> {
     startMonth: String(data.start_month),
     startYear: String(data.start_year),
     annualReturn: String(data.annual_return),
+    showProjections: data.show_projections ?? false,
   };
   await save(NS, result);
   return result;
@@ -60,6 +63,7 @@ export async function saveSavings(d: SavingsData): Promise<void> {
           start_month: parseInt(d.startMonth) || 1,
           start_year: parseInt(d.startYear) || new Date().getFullYear(),
           annual_return: parseFloat(d.annualReturn) || 5,
+          show_projections: d.showProjections,
         },
         { onConflict: 'user_id' },
       ),

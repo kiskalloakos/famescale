@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { saveSetup } from '../lib/setup';
 import { saveGlobalCurrency } from '../lib/currency';
+import { glowGreen } from '../lib/glows';
 
 export type { SetupData } from '../lib/setup';
 
@@ -135,7 +136,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
                     <Text style={[s.currencyCode, active && s.choiceTextActive]}>{c.code}</Text>
                     <Text style={s.currencyName}>{c.name}</Text>
                   </View>
-                  {active && <Ionicons name="checkmark-circle" size={20} color="#00C896" />}
+                  {active && <Ionicons name="checkmark-circle" size={20} color="#00C896" style={glowGreen} />}
                 </TouchableOpacity>
               );
             })}
@@ -171,7 +172,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
           {/* Dashboard — locked-in, shown for clarity */}
           <View style={[s.choiceCard, s.choiceCardLocked]}>
             <View style={s.choiceIcon}>
-              <Ionicons name="home-outline" size={18} color="#00C896" />
+              <Ionicons name="home-outline" size={18} color="#00C896" style={glowGreen} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.choiceTitle, s.choiceTextActive]}>Dashboard</Text>
@@ -190,7 +191,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
                 activeOpacity={0.75}
               >
                 <View style={s.choiceIcon}>
-                  <Ionicons name={t.icon} size={18} color={active ? '#00C896' : '#555'} />
+                  <Ionicons name={t.icon} size={18} color={active ? '#00C896' : '#555'} style={active ? glowGreen : undefined} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[s.choiceTitle, active && s.choiceTextActive]}>{t.title}</Text>
@@ -276,7 +277,12 @@ const s = StyleSheet.create({
   choiceCardLocked: { borderColor: '#1F3A30', backgroundColor: '#0D1F1A' },
   choiceIcon: { width: 28, alignItems: 'center' },
   choiceTitle: { fontSize: 15, fontWeight: '600', color: '#888', marginBottom: 3 },
-  choiceTextActive: { color: '#00C896' },
+  choiceTextActive: {
+    color: '#00C896',
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
   choiceDesc: { fontSize: 12, color: '#3A3A3A', lineHeight: 16, fontWeight: '500' },
 
   checkbox: {
@@ -300,6 +306,9 @@ const s = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#1F3A30',
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
 
   // Currency rows (unchanged)
@@ -328,9 +337,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
 });

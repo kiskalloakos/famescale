@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase, getRedirectUrl } from '../lib/supabase';
+import { glowGreen } from '../lib/glows';
 
 type Mode = 'sign-in' | 'sign-up' | 'reset';
 
@@ -91,7 +92,7 @@ export default function AuthScreen() {
 
           {resetSent ? (
             <View style={s.sentBox}>
-              <Ionicons name="mail-outline" size={28} color="#00C896" />
+              <Ionicons name="mail-outline" size={28} color="#00C896" style={glowGreen} />
               <Text style={s.sentTitle}>Check your email</Text>
               <Text style={s.sentText}>
                 We sent a password reset link to{'\n'}
@@ -224,7 +225,15 @@ const s = StyleSheet.create({
 
   label: { fontSize: 10, fontWeight: '700', color: '#555', letterSpacing: 1.2, marginBottom: 8 },
   passwordHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  forgotLink: { fontSize: 11, color: '#00C896', fontWeight: '600', letterSpacing: 0.3 },
+  forgotLink: {
+    fontSize: 11,
+    color: '#00C896',
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
 
   input: {
     backgroundColor: '#151515',
@@ -262,16 +271,22 @@ const s = StyleSheet.create({
     marginTop: 6,
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
 
   switchBtn: { alignItems: 'center', paddingVertical: 16 },
   switchText: { fontSize: 13, color: '#555', fontWeight: '500' },
-  switchLink: { color: '#00C896', fontWeight: '600' },
+  switchLink: {
+    color: '#00C896',
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
 
   // "Check your email" view
   sentBox: { alignItems: 'center', paddingTop: 12 },

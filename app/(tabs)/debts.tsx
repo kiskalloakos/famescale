@@ -17,6 +17,8 @@ import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import { Debt, getDebts, refreshDebts, saveDebt, deleteDebt } from '../../lib/debts';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
+import { glowGreen, glowAmber } from '../../lib/glows';
+import { feedback } from '../../lib/feedback';
 import { useDragReorder } from '../../lib/useDragReorder';
 import DraggableRow from '../../components/DraggableRow';
 import SortableScroll from '../../components/SortableScroll';
@@ -81,6 +83,7 @@ export default function Debts() {
     setFormName('');
     setFormAmount('');
     setFormNotes('');
+    feedback.tap();
     setModal({ visible: true, editing: null });
   };
 
@@ -88,6 +91,7 @@ export default function Debts() {
     setFormName(debt.name);
     setFormAmount(debt.amount);
     setFormNotes(debt.notes ?? '');
+    feedback.tap();
     setModal({ visible: true, editing: debt });
   };
 
@@ -105,11 +109,13 @@ export default function Debts() {
         };
     setDebts(editing ? debts.map((d) => (d.id === editing.id ? debt : d)) : [...debts, debt]);
     setModal({ visible: false, editing: null });
+    feedback.success();
     await saveDebt(debt);
   };
 
   const reorderDebts = useCallback(async (next: Debt[]) => {
     const repositioned = next.map((d, i) => ({ ...d, position: i }));
+    feedback.dragEnd();
     setDebts((prev) => {
       for (const d of repositioned) {
         const orig = prev.find((p) => p.id === d.id);
@@ -153,6 +159,7 @@ export default function Debts() {
     const debt = modal.editing;
     setModal({ visible: false, editing: null });
     setDebts((prev) => prev.filter((d) => d.id !== debt.id));
+    feedback.destroy();
     await deleteDebt(debt.id);
     showToast(`Deleted ${debt.name}`, {
       label: 'Undo',
@@ -175,6 +182,7 @@ export default function Debts() {
             name="pencil-outline"
             size={15}
             color={editMode ? '#00C896' : '#777'}
+            style={editMode ? glowGreen : undefined}
           />
         </TouchableOpacity>
       </View>
@@ -248,7 +256,7 @@ export default function Debts() {
                 />
               )}
               <TouchableOpacity style={s.addRow} onPress={openAdd}>
-                <Ionicons name="add-circle-outline" size={16} color="#00C896" />
+                <Ionicons name="add-circle-outline" size={16} color="#FFA94D" style={glowAmber} />
                 <Text style={s.addRowText}>Add Debt</Text>
               </TouchableOpacity>
             </>
@@ -341,9 +349,9 @@ const s = StyleSheet.create({
     borderColor: '#1F3A30',
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 3,
   },
   scroll: { paddingHorizontal: 16 },
 
@@ -359,12 +367,12 @@ const s = StyleSheet.create({
   heroAmount: {
     fontSize: 40,
     fontWeight: '800',
-    color: '#FF6B6B',
+    color: '#FFA94D',
     letterSpacing: -1.2,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(255, 107, 107, 0.45)',
+    textShadowColor: 'rgba(255, 169, 77, 0.25)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
+    textShadowRadius: 14,
   },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -408,7 +416,15 @@ const s = StyleSheet.create({
   rowDropTarget: { borderTopWidth: 2, borderTopColor: '#00C896' },
   rowLabel: { fontSize: 15, color: '#EEE', fontWeight: '500' },
   rowMeta: { fontSize: 11, color: '#555', marginTop: 2, fontWeight: '500' },
-  rowValue: { fontSize: 14, color: '#FF6B6B', fontWeight: '500', fontVariant: ['tabular-nums'] },
+  rowValue: {
+    fontSize: 14,
+    color: '#FFA94D',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(255, 169, 77, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
 
   empty: {
     alignItems: 'center',
@@ -427,7 +443,14 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1C1C1C',
   },
-  addRowText: { fontSize: 14, color: '#00C896', fontWeight: '500' },
+  addRowText: {
+    fontSize: 14,
+    color: '#FFA94D',
+    fontWeight: '500',
+    textShadowColor: 'rgba(255, 169, 77, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
 
   // Modal
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
@@ -479,9 +502,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
   deleteLink: {

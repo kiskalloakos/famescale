@@ -7,6 +7,7 @@ export interface InvestmentData {
   startMonth: string;
   startYear: string;
   annualReturn: string;
+  showProjections: boolean;
 }
 
 const NS = 'investments';
@@ -16,6 +17,7 @@ const DEFAULT: InvestmentData = {
   startMonth: String(new Date().getMonth() + 1),
   startYear: String(new Date().getFullYear()),
   annualReturn: '7',
+  showProjections: false,
 };
 
 async function userId(): Promise<string | null> {
@@ -32,7 +34,7 @@ export async function refreshInvestments(): Promise<InvestmentData> {
   if (!uid) return getInvestments();
   const { data, error } = await supabase
     .from('investment_setup')
-    .select('total_invested, start_month, start_year, annual_return')
+    .select('total_invested, start_month, start_year, annual_return, show_projections')
     .eq('user_id', uid)
     .maybeSingle();
   if (error || !data) return getInvestments();
@@ -41,6 +43,7 @@ export async function refreshInvestments(): Promise<InvestmentData> {
     startMonth: String(data.start_month),
     startYear: String(data.start_year),
     annualReturn: String(data.annual_return),
+    showProjections: data.show_projections ?? false,
   };
   await save(NS, result);
   return result;
@@ -60,6 +63,7 @@ export async function saveInvestments(d: InvestmentData): Promise<void> {
           start_month: parseInt(d.startMonth) || 1,
           start_year: parseInt(d.startYear) || new Date().getFullYear(),
           annual_return: parseFloat(d.annualReturn) || 7,
+          show_projections: d.showProjections,
         },
         { onConflict: 'user_id' },
       ),

@@ -24,10 +24,13 @@ import {
   sortEntries,
   allTimeTotal,
   previousEntry,
+  currentEntry,
   activeMonthCount,
 } from '../../lib/revenue';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
+import { glowGreen } from '../../lib/glows';
+import { feedback } from '../../lib/feedback';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -39,6 +42,7 @@ const CURRENCIES = [
 ];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const YEAR_PICKER_RANGE = 30; // years back from current calendar year
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -50,14 +54,13 @@ export default function Revenue() {
   const [editVisible, setEditVisible] = useState(false);
   const [monthInputs, setMonthInputs] = useState<string[]>(Array(12).fill(''));
 
-  // Past-year entry modal (add/edit a year)
+  // Add/edit a year
   const [entryModal, setEntryModal] = useState<{ visible: boolean; editing: RevenueEntry | null }>({
     visible: false,
     editing: null,
   });
   const [formLabel, setFormLabel] = useState('');
   const [formAmount, setFormAmount] = useState('');
-  const [formCurrent, setFormCurrent] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useFocusEffect(
@@ -86,9 +89,10 @@ export default function Revenue() {
   }
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
-  const currentEntry = state.entries.find((e) => e.label === state.currentYearLabel);
-  const currentAmount = currentEntry?.amount ?? 0;
-  const currentMonths = currentEntry?.months;
+  const current = currentEntry(state);
+  const currentLabel = current?.label ?? String(new Date().getFullYear());
+  const currentAmount = current?.amount ?? 0;
+  const currentMonths = current?.months;
   const prev = previousEntry(state);
   const total = allTimeTotal(state.entries);
 
@@ -123,41 +127,64 @@ export default function Revenue() {
       ? currentMonths.map((m) => (m > 0 ? String(m) : ''))
       : Array(12).fill('');
     setMonthInputs(seed);
+    feedback.tap();
     setEditVisible(true);
   };
 
   const updateMonth = (idx: number, value: string) => {
-    setMonthInputs((prev) => prev.map((v, i) => (i === idx ? value : v)));
+    setMonthInputs((prevInputs) => prevInputs.map((v, i) => (i === idx ? value : v)));
   };
 
   const liveTotal = monthInputs.reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
 
   const saveEdit = async () => {
+    if (!current) return;
     const months = monthInputs.map((v) => parseFloat(v) || 0);
     const amount = months.reduce((a, b) => a + b, 0);
     const updated: RevenueState = {
-      ...state,
       entries: state.entries.map((e) =>
-        e.label === state.currentYearLabel ? { ...e, amount, months } : e,
+        e.id === current.id ? { ...e, amount, months } : e,
       ),
     };
     setState(updated);
+    feedback.success();
     await saveRevenue(updated);
     setEditVisible(false);
   };
 
-  // ── Past-year CRUD ───────────────────────────────────────────────────────
+  // ── Year CRUD ────────────────────────────────────────────────────────────
+  const calYear = new Date().getFullYear();
+
+  // Picker shows current calendar year (and one ahead for early planning) down N years.
+  // When editing, the entry's own year stays available; otherwise filter taken years.
+  const takenYears = new Set(state.entries.map((e) => e.label));
+  const editingLabel = entryModal.editing?.label;
+  const availableYears: string[] = [];
+  for (let y = calYear + 1; y >= calYear - YEAR_PICKER_RANGE; y--) {
+    const label = String(y);
+    if (!takenYears.has(label) || label === editingLabel) availableYears.push(label);
+  }
+
   const openAddEntry = () => {
-    setFormLabel('');
+    const taken = new Set(state.entries.map((e) => e.label));
+    // Default selection: most recent un-taken year (usually calYear).
+    let defaultYear = String(calYear);
+    for (let y = calYear; y >= calYear - YEAR_PICKER_RANGE; y--) {
+      if (!taken.has(String(y))) {
+        defaultYear = String(y);
+        break;
+      }
+    }
+    setFormLabel(defaultYear);
     setFormAmount('');
-    setFormCurrent(false);
+    feedback.tap();
     setEntryModal({ visible: true, editing: null });
   };
 
   const openEditEntry = (entry: RevenueEntry) => {
     setFormLabel(entry.label);
     setFormAmount(String(entry.amount));
-    setFormCurrent(state.currentYearLabel === entry.label);
+    feedback.tap();
     setEntryModal({ visible: true, editing: entry });
   };
 
@@ -166,50 +193,43 @@ export default function Revenue() {
     const label = formLabel.trim();
     const amount = parseFloat(formAmount) || 0;
     const wasEditing = entryModal.editing;
-    const oldLabel = wasEditing?.label;
 
     let entries: RevenueEntry[];
     if (wasEditing) {
       entries = state.entries.map((e) => {
-        if (e.label !== oldLabel) return e;
-        // Preserve months only if amount is unchanged (rename); else lump-sum override.
+        if (e.id !== wasEditing.id) return e;
+        // Preserve months only if amount is unchanged (year-rename); else lump-sum override.
         if (e.amount === amount && e.months) return { ...e, label };
         return { ...e, label, amount, months: undefined };
       });
     } else {
       if (state.entries.some((e) => e.label === label)) {
+        feedback.error();
         Alert.alert('Year already exists', `An entry for "${label}" already exists. Tap it to edit.`);
         return;
       }
       entries = [...state.entries, { id: newId(), label, amount }];
     }
 
-    let currentYearLabel = state.currentYearLabel;
-    if (formCurrent) currentYearLabel = label;
-    else if (wasEditing && oldLabel === currentYearLabel && oldLabel !== label) {
-      currentYearLabel = label;
-    }
-
-    const updated: RevenueState = { currentYearLabel, entries };
+    const updated: RevenueState = { entries };
     setState(updated);
+    feedback.success();
     await saveRevenue(updated);
     setEntryModal({ visible: false, editing: null });
   };
 
   const deleteEntry = async (entry: RevenueEntry) => {
     if (state.entries.length === 1) {
+      feedback.error();
       Alert.alert('Cannot delete', 'You need at least one revenue entry.');
       return;
     }
     setEntryModal({ visible: false, editing: null });
     const before = state;
     const entries = state.entries.filter((e) => e.id !== entry.id);
-    let currentYearLabel = state.currentYearLabel;
-    if (entry.label === currentYearLabel) {
-      currentYearLabel = sortEntries(entries)[0]?.label ?? String(new Date().getFullYear());
-    }
-    const updated: RevenueState = { currentYearLabel, entries };
+    const updated: RevenueState = { entries };
     setState(updated);
+    feedback.destroy();
     await saveRevenue(updated);
     showToast(`Deleted ${entry.label}`, {
       label: 'Undo',
@@ -222,9 +242,8 @@ export default function Revenue() {
 
   const sortedEntries = sortEntries(state.entries);
 
-  // New-year reminder: current label's year is behind the calendar year.
-  const calYear = new Date().getFullYear();
-  const labelYear = parseInt(state.currentYearLabel, 10);
+  // New-year reminder: current (newest) entry is behind the calendar year.
+  const labelYear = parseInt(currentLabel, 10);
   const showNewYearBanner =
     !isNaN(labelYear) &&
     labelYear < calYear &&
@@ -234,10 +253,7 @@ export default function Revenue() {
   const addNewYearEntry = async () => {
     const label = String(calYear);
     const entry: RevenueEntry = { id: newId(), label, amount: 0 };
-    const updated: RevenueState = {
-      currentYearLabel: label,
-      entries: [...state.entries, entry],
-    };
+    const updated: RevenueState = { entries: [...state.entries, entry] };
     setState(updated);
     await saveRevenue(updated);
   };
@@ -252,7 +268,7 @@ export default function Revenue() {
         {/* New-year reminder banner */}
         {showNewYearBanner && (
           <View style={s.banner}>
-            <Ionicons name="alarm-outline" size={18} color="#00C896" />
+            <Ionicons name="alarm-outline" size={18} color="#00C896" style={glowGreen} />
             <View style={{ flex: 1 }}>
               <Text style={s.bannerTitle}>It's {calYear}</Text>
               <Text style={s.bannerSub}>
@@ -270,13 +286,7 @@ export default function Revenue() {
 
         {/* Main current-year card */}
         <TouchableOpacity style={s.heroCard} onPress={openEdit} activeOpacity={0.85}>
-          <View style={s.heroTopRow}>
-            <Text style={s.heroYear}>{state.currentYearLabel}</Text>
-            <View style={s.currentPill}>
-              <Text style={s.currentPillText}>CURRENT</Text>
-            </View>
-          </View>
-
+          <Text style={s.heroYear}>{currentLabel}</Text>
           <Text style={s.heroAmount}>{fmt(currentAmount, symbol)}</Text>
 
           {growthPct !== null && (
@@ -284,9 +294,16 @@ export default function Revenue() {
               <Ionicons
                 name={growthPct >= 0 ? 'trending-up' : 'trending-down'}
                 size={14}
-                color={growthPct >= 0 ? '#00C896' : '#FF4C4C'}
+                color={growthPct >= 0 ? '#00C896' : '#888'}
+                style={growthPct >= 0 ? glowGreen : undefined}
               />
-              <Text style={[s.growthText, { color: growthPct >= 0 ? '#00C896' : '#FF4C4C' }]}>
+              <Text
+                style={[
+                  s.growthText,
+                  { color: growthPct >= 0 ? '#00C896' : '#888' },
+                  growthPct >= 0 && glowGreen,
+                ]}
+              >
                 {growthPct >= 0 ? '+' : ''}
                 {growthPct.toFixed(1)}% vs {prev!.label}
               </Text>
@@ -350,32 +367,19 @@ export default function Revenue() {
           <View style={s.historyHeader}>
             <Text style={s.historyTitle}>Revenue History</Text>
             <TouchableOpacity style={s.historyAddBtn} onPress={openAddEntry}>
-              <Ionicons name="add" size={16} color="#00C896" />
+              <Ionicons name="add" size={16} color="#00C896" style={glowGreen} />
             </TouchableOpacity>
           </View>
-          {sortedEntries.map((entry, i) => {
-            const isCurrent = entry.label === state.currentYearLabel;
-            return (
-              <TouchableOpacity
-                key={entry.id}
-                style={[s.historyRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
-                onPress={() => openEditEntry(entry)}
-              >
-                <View style={s.historyDot}>
-                  <Ionicons
-                    name={isCurrent ? 'radio-button-on' : 'ellipse-outline'}
-                    size={14}
-                    color={isCurrent ? '#00C896' : '#333'}
-                  />
-                </View>
-                <Text style={[s.historyLabel, isCurrent && s.historyLabelActive]}>
-                  {entry.label}
-                  {isCurrent && <Text style={s.historyCurrentTag}>  · current</Text>}
-                </Text>
-                <Text style={s.historyAmount}>{fmt(entry.amount, symbol)}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {sortedEntries.map((entry, i) => (
+            <TouchableOpacity
+              key={entry.id}
+              style={[s.historyRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
+              onPress={() => openEditEntry(entry)}
+            >
+              <Text style={s.historyLabel}>{entry.label}</Text>
+              <Text style={s.historyAmount}>{fmt(entry.amount, symbol)}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         <View style={{ height: 40 }} />
@@ -390,7 +394,7 @@ export default function Revenue() {
           <View style={s.overlay}>
             <View style={s.sheet}>
               <View style={s.sheetHeader}>
-                <Text style={s.sheetTitle}>{state.currentYearLabel} by month</Text>
+                <Text style={s.sheetTitle}>{currentLabel} by month</Text>
                 <View style={s.liveTotal}>
                   <Text style={s.liveTotalLabel}>TOTAL</Text>
                   <Text style={s.liveTotalValue}>{fmt(liveTotal, symbol)}</Text>
@@ -431,7 +435,7 @@ export default function Revenue() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Past-year entry modal (add or edit a year) */}
+      {/* Add/edit a year */}
       <Modal visible={entryModal.visible} transparent animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -442,15 +446,32 @@ export default function Revenue() {
               <Text style={s.sheetTitle}>
                 {entryModal.editing ? 'Edit Revenue Year' : 'Add Revenue Year'}
               </Text>
-              <Text style={s.inputLabel}>Year or period</Text>
-              <TextInput
-                style={s.input}
-                value={formLabel}
-                onChangeText={setFormLabel}
-                placeholder="e.g. 2024 or 2020-2022"
-                placeholderTextColor="#444"
-                autoFocus
-              />
+
+              <Text style={s.inputLabel}>Year</Text>
+              <ScrollView
+                style={s.yearList}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                {availableYears.map((y) => {
+                  const selected = y === formLabel;
+                  return (
+                    <TouchableOpacity
+                      key={y}
+                      style={[s.yearRow, selected && s.yearRowActive]}
+                      onPress={() => {
+                        if (!selected) feedback.select();
+                        setFormLabel(y);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[s.yearRowText, selected && s.yearRowTextActive]}>{y}</Text>
+                      {selected && <Ionicons name="checkmark" size={16} color="#00C896" style={glowGreen} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
               <Text style={s.inputLabel}>Total revenue ({currency})</Text>
               <TextInput
                 style={s.input}
@@ -460,19 +481,6 @@ export default function Revenue() {
                 placeholderTextColor="#444"
                 keyboardType="decimal-pad"
               />
-
-              <TouchableOpacity
-                style={s.toggleRow}
-                onPress={() => setFormCurrent(!formCurrent)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={formCurrent ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={22}
-                  color={formCurrent ? '#00C896' : '#3A3A3A'}
-                />
-                <Text style={s.toggleText}>Set as current year</Text>
-              </TouchableOpacity>
 
               <View style={s.sheetActions}>
                 <TouchableOpacity
@@ -516,17 +524,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222',
   },
-  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroYear: { fontSize: 14, color: '#666', fontWeight: '600', letterSpacing: 1 },
-  currentPill: {
-    backgroundColor: '#0D1F1A',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#00C896',
-  },
-  currentPillText: { fontSize: 9, color: '#00C896', fontWeight: '700', letterSpacing: 1 },
 
   heroAmount: {
     fontSize: 46,
@@ -535,9 +533,9 @@ const s = StyleSheet.create({
     letterSpacing: -1.4,
     marginTop: 12,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.45)',
+    textShadowColor: 'rgba(0, 200, 150, 0.25)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
+    textShadowRadius: 14,
   },
 
   growthRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
@@ -605,9 +603,9 @@ const s = StyleSheet.create({
     borderRadius: 8,
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 3,
   },
   bannerBtnText: { fontSize: 12, fontWeight: '700', color: '#000' },
   bannerClose: { padding: 4 },
@@ -646,10 +644,7 @@ const s = StyleSheet.create({
     paddingVertical: 13,
     gap: 10,
   },
-  historyDot: { width: 18, alignItems: 'center' },
   historyLabel: { flex: 1, fontSize: 14, color: '#CCC', fontWeight: '500' },
-  historyLabelActive: { color: '#00C896', fontWeight: '600' },
-  historyCurrentTag: { fontSize: 11, color: '#3A6A5A', fontWeight: '500' },
   historyAmount: { fontSize: 14, color: '#888', fontWeight: '500', fontVariant: ['tabular-nums'] },
 
   // Entry modal extras
@@ -673,14 +668,39 @@ const s = StyleSheet.create({
     borderColor: '#2C2C2C',
     fontWeight: '500',
   },
-  toggleRow: {
+
+  // Year picker
+  yearList: {
+    maxHeight: 220,
+    backgroundColor: '#181818',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+    marginBottom: 20,
+  },
+  yearRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
   },
-  toggleText: { fontSize: 14, color: '#CCC', fontWeight: '500' },
+  yearRowActive: {
+    backgroundColor: '#0D1F1A',
+  },
+  yearRowText: {
+    fontSize: 16,
+    color: '#AAA',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+  },
+  yearRowTextActive: {
+    color: '#00C896',
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
 
   // Modal
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
@@ -702,10 +722,19 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
     marginBottom: 16,
   },
-  sheetTitle: { fontSize: 19, fontWeight: '700', color: '#FFF', letterSpacing: -0.3 },
+  sheetTitle: { fontSize: 19, fontWeight: '700', color: '#FFF', letterSpacing: -0.3, marginBottom: 16 },
   liveTotal: { alignItems: 'flex-end' },
   liveTotalLabel: { fontSize: 9, fontWeight: '700', color: '#555', letterSpacing: 1 },
-  liveTotalValue: { fontSize: 18, fontWeight: '800', color: '#00C896', marginTop: 2, fontVariant: ['tabular-nums'] },
+  liveTotalValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#00C896',
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
 
   monthList: { marginBottom: 12 },
   monthRow: {
@@ -748,9 +777,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 

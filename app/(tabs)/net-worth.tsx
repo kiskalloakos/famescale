@@ -9,6 +9,8 @@ import { getInvestments, refreshInvestments } from '../../lib/investments';
 import { getSavings, refreshSavings } from '../../lib/savings';
 import { getDebts, refreshDebts } from '../../lib/debts';
 import { SetupData, getSetup, refreshSetup, saveSetup, subscribeSetup } from '../../lib/setup';
+import { glowGreen, glowAmber } from '../../lib/glows';
+import { feedback } from '../../lib/feedback';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -89,6 +91,7 @@ export default function NetWorth() {
   const toggleDebtsInNetWorth = async () => {
     if (!setup) return;
     const next: SetupData = { ...setup, includeDebtsInNetWorth: !setup.includeDebtsInNetWorth };
+    feedback.select();
     setSetup(next);
     await saveSetup(next);
   };
@@ -102,12 +105,7 @@ export default function NetWorth() {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.heroCard}>
           <Text style={s.heroLabel}>NET WORTH</Text>
-          <Text
-            style={[
-              s.heroAmount,
-              netWorth < 0 && { color: '#FF6B6B', textShadowColor: 'rgba(255, 107, 107, 0.45)' },
-            ]}
-          >
+          <Text style={netWorth < 0 ? s.heroAmountNegative : s.heroAmount}>
             {fmt(netWorth, symbol)}
           </Text>
           <Text style={s.heroSub}>In your global currency · {currency}</Text>
@@ -118,7 +116,7 @@ export default function NetWorth() {
 
           <View style={s.line}>
             <View style={s.lineLeft}>
-              <Ionicons name="wallet-outline" size={16} color="#00C896" />
+              <Ionicons name="wallet-outline" size={16} color="#00C896" style={glowGreen} />
               <Text style={s.lineLabel}>Cash on hand</Text>
             </View>
             <Text style={s.linePos}>{fmt(cash, symbol)}</Text>
@@ -127,7 +125,7 @@ export default function NetWorth() {
           {investmentsEnabled && (
             <View style={[s.line, s.lineBordered]}>
               <View style={s.lineLeft}>
-                <Ionicons name="trending-up-outline" size={16} color="#00C896" />
+                <Ionicons name="trending-up-outline" size={16} color="#00C896" style={glowGreen} />
                 <Text style={s.lineLabel}>Investments</Text>
               </View>
               <Text style={s.linePos}>{fmt(invested, symbol)}</Text>
@@ -137,7 +135,7 @@ export default function NetWorth() {
           {savingsEnabled && (
             <View style={[s.line, s.lineBordered]}>
               <View style={s.lineLeft}>
-                <Ionicons name="wallet-outline" size={16} color="#00C896" />
+                <Ionicons name="wallet-outline" size={16} color="#00C896" style={glowGreen} />
                 <Text style={s.lineLabel}>Savings</Text>
               </View>
               <Text style={s.linePos}>{fmt(saved, symbol)}</Text>
@@ -150,7 +148,8 @@ export default function NetWorth() {
                 <Ionicons
                   name="document-text-outline"
                   size={16}
-                  color={debtsCountInTotal ? '#FF6B6B' : '#3A3A3A'}
+                  color={debtsCountInTotal ? '#FFA94D' : '#3A3A3A'}
+                  style={debtsCountInTotal ? glowAmber : undefined}
                 />
                 <Text style={[s.lineLabel, !debtsCountInTotal && s.lineLabelMuted]}>Debts</Text>
                 <TouchableOpacity
@@ -161,7 +160,7 @@ export default function NetWorth() {
                   <Ionicons
                     name={debtsCountInTotal ? 'eye-outline' : 'eye-off-outline'}
                     size={14}
-                    color={debtsCountInTotal ? '#555' : '#3A6A5A'}
+                    color={debtsCountInTotal ? '#555' : '#444'}
                   />
                 </TouchableOpacity>
               </View>
@@ -172,12 +171,6 @@ export default function NetWorth() {
             </View>
           )}
 
-          <View style={s.totalRow}>
-            <Text style={s.totalLabel}>NET WORTH</Text>
-            <Text style={[s.totalValue, netWorth < 0 && { color: '#FF6B6B' }]}>
-              {fmt(netWorth, symbol)}
-            </Text>
-          </View>
         </View>
 
         <Text style={s.footnote}>
@@ -211,9 +204,19 @@ const s = StyleSheet.create({
     color: '#00C896',
     letterSpacing: -1.2,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.45)',
+    textShadowColor: 'rgba(0, 200, 150, 0.25)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
+    textShadowRadius: 14,
+  },
+  heroAmountNegative: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#FFA94D',
+    letterSpacing: -1.2,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(255, 169, 77, 0.25)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 14,
   },
   heroSub: { fontSize: 11, color: '#444', marginTop: 10, fontWeight: '500' },
 
@@ -244,23 +247,18 @@ const s = StyleSheet.create({
   lineLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   lineLabel: { fontSize: 14, color: '#CCC', fontWeight: '500' },
   linePos: { fontSize: 14, color: '#EEE', fontWeight: '500', fontVariant: ['tabular-nums'] },
-  lineNeg: { fontSize: 14, color: '#FF6B6B', fontWeight: '500', fontVariant: ['tabular-nums'] },
+  lineNeg: {
+    fontSize: 14,
+    color: '#FFA94D',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(255, 169, 77, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
   lineLabelMuted: { color: '#555', textDecorationLine: 'line-through' },
   lineMuted: { color: '#3A3A3A', textDecorationLine: 'line-through' },
   eyeBtn: { padding: 4, marginLeft: 4 },
-
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#1E1E1E',
-    backgroundColor: '#0F0F0F',
-  },
-  totalLabel: { fontSize: 11, fontWeight: '700', color: '#555', letterSpacing: 1.5 },
-  totalValue: { fontSize: 18, fontWeight: '800', color: '#00C896', fontVariant: ['tabular-nums'] },
 
   footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 4, lineHeight: 18, fontWeight: '500' },
 });

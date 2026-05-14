@@ -5,13 +5,12 @@ import { reportable } from './sync';
 
 export interface RevenueEntry {
   id: string;            // UUID — stable across renames + cloud sync
-  label: string;         // e.g. "2026" or "2020-2022"
+  label: string;         // e.g. "2026"
   amount: number;
   months?: number[];     // 12 entries (Jan–Dec) when monthly breakdown is used
 }
 
 export interface RevenueState {
-  currentYearLabel: string;
   entries: RevenueEntry[];
 }
 
@@ -19,16 +18,15 @@ const NS = 'revenue';
 
 function defaultState(): RevenueState {
   const year = String(new Date().getFullYear());
-  return { currentYearLabel: year, entries: [{ id: newId(), label: year, amount: 0 }] };
+  return { entries: [{ id: newId(), label: year, amount: 0 }] };
 }
 
-function ensureCurrentEntry(state: RevenueState): RevenueState {
-  // Backfill ids for any entries cached before id was a field
+function normalize(state: RevenueState): RevenueState {
   const entries = state.entries.map((e) => (e.id ? e : { ...e, id: newId() }));
-  if (!entries.some((e) => e.label === state.currentYearLabel)) {
-    entries.push({ id: newId(), label: state.currentYearLabel, amount: 0 });
+  if (entries.length === 0) {
+    entries.push({ id: newId(), label: String(new Date().getFullYear()), amount: 0 });
   }
-  return { currentYearLabel: state.currentYearLabel, entries };
+  return { entries };
 }
 
 async function userId(): Promise<string | null> {
@@ -38,7 +36,7 @@ async function userId(): Promise<string | null> {
 
 export async function getRevenue(): Promise<RevenueState> {
   const state = await load<RevenueState>(NS, defaultState());
-  return ensureCurrentEntry(state);
+  return normalize(state);
 }
 
 export async function refreshRevenue(): Promise<RevenueState> {
@@ -47,7 +45,7 @@ export async function refreshRevenue(): Promise<RevenueState> {
 
   const { data, error } = await supabase
     .from('revenue_entries')
-    .select('id, label, amount, months, is_current')
+    .select('id, label, amount, months')
     .eq('user_id', uid);
 
   if (error) return getRevenue();
@@ -60,11 +58,7 @@ export async function refreshRevenue(): Promise<RevenueState> {
     months: r.months ?? undefined,
   }));
 
-  const currentRow = rows.find((r) => r.is_current);
-  const currentYearLabel =
-    currentRow?.label ?? entries[entries.length - 1]?.label ?? String(new Date().getFullYear());
-
-  const state = ensureCurrentEntry({ currentYearLabel, entries });
+  const state = normalize({ entries });
   await save(NS, state);
   return state;
 }
@@ -92,13 +86,14 @@ export async function saveRevenue(state: RevenueState): Promise<void> {
   }
 
   if (state.entries.length > 0) {
+    const newestLabel = sortEntries(state.entries)[0]?.label;
     const rows = state.entries.map((e) => ({
       id: e.id,
       user_id: uid,
       label: e.label,
       amount: e.amount,
       months: e.months ?? null,
-      is_current: e.label === state.currentYearLabel,
+      is_current: e.label === newestLabel,
     }));
     await reportable(supabase.from('revenue_entries').upsert(rows));
   }
@@ -113,11 +108,13 @@ export function allTimeTotal(entries: RevenueEntry[]): number {
   return entries.reduce((sum, e) => sum + e.amount, 0);
 }
 
+// Current entry = newest by label.
+export function currentEntry(state: RevenueState): RevenueEntry | null {
+  return sortEntries(state.entries)[0] ?? null;
+}
+
 export function previousEntry(state: RevenueState): RevenueEntry | null {
-  const sorted = sortEntries(state.entries);
-  const idx = sorted.findIndex((e) => e.label === state.currentYearLabel);
-  if (idx === -1 || idx + 1 >= sorted.length) return null;
-  return sorted[idx + 1];
+  return sortEntries(state.entries)[1] ?? null;
 }
 
 export function sumMonths(months: number[] | undefined): number {

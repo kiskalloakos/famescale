@@ -28,6 +28,10 @@ import {
   currentMonthKey,
 } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
+import { glowGreen, glowAmber, glowGreenHero } from '../../lib/glows';
+import { feedback } from '../../lib/feedback';
+import { Transaction, getTransactions, logTransaction } from '../../lib/transactions';
+import StatementSheet from '../../components/StatementSheet';
 import { useDragReorder } from '../../lib/useDragReorder';
 import DraggableRow from '../../components/DraggableRow';
 import SortableScroll from '../../components/SortableScroll';
@@ -41,6 +45,24 @@ const MONTH_NAMES = [
 function monthName(key: string): string {
   const m = parseInt(key.split('-')[1], 10) - 1;
   return MONTH_NAMES[m] ?? key;
+}
+
+function txMonthKey(iso: string): string {
+  const d = new Date(iso);
+  return `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function txDayLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return `Today, ${time}`;
+  if (isYesterday) return `Yesterday, ${time}`;
+  return `${MONTH_NAMES[d.getMonth()].slice(0, 3)} ${d.getDate()}, ${time}`;
 }
 
 const CURRENCIES = [
@@ -91,6 +113,13 @@ export default function Dashboard() {
     mode: 'add',
   });
   const [moneyAmount, setMoneyAmount] = useState('');
+  const [moneyNote, setMoneyNote] = useState('');
+
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [statement, setStatement] = useState<{ visible: boolean; year: number; month: number; label: string }>(
+    { visible: false, year: new Date().getFullYear(), month: new Date().getMonth(), label: '' },
+  );
 
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
@@ -98,6 +127,13 @@ export default function Dashboard() {
 
   const closeMoneyModal = useCallback(() => {
     setMoneyModal((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const openHistory = useCallback(async () => {
+    feedback.tap();
+    setHistoryVisible(true);
+    const list = await getTransactions(500);
+    setTransactions(list);
   }, []);
 
   // ── Auto-reset paid costs that were paid in a previous month ──────────────
@@ -180,12 +216,14 @@ export default function Dashboard() {
       editing ? accounts.map((a) => (a.id === editing.id ? account : a)) : [...accounts, account],
     );
     setAccountModal({ visible: false, editing: null });
+    feedback.success();
     await persistAccount(account);
   };
 
   // ── Drag-to-reorder ───────────────────────────────────────────────────────
   const reorderAccounts = useCallback(async (next: Account[]) => {
     const repositioned = next.map((a, i) => ({ ...a, position: i }));
+    feedback.dragEnd();
     setAccounts((prev) => {
       // Persist any row whose position actually changed
       for (const a of repositioned) {
@@ -198,6 +236,7 @@ export default function Dashboard() {
 
   const reorderCosts = useCallback(async (next: Cost[]) => {
     const repositioned = next.map((c, i) => ({ ...c, position: i }));
+    feedback.dragEnd();
     setCosts((prev) => {
       for (const c of repositioned) {
         const orig = prev.find((p) => p.id === c.id);
@@ -258,6 +297,7 @@ export default function Dashboard() {
               name={cost.paid ? 'checkmark-circle' : 'ellipse-outline'}
               size={22}
               color={cost.paid ? '#00C896' : '#3A3A3A'}
+              style={cost.paid ? glowGreen : undefined}
             />
           </TouchableOpacity>
           <TouchableOpacity
@@ -289,6 +329,7 @@ export default function Dashboard() {
   const deleteAccount = async (account: Account) => {
     setAccountModal({ visible: false, editing: null });
     setAccounts((prev) => prev.filter((a) => a.id !== account.id));
+    feedback.destroy();
     await removeAccount(account.id);
     showToast(`Deleted ${account.name}`, {
       label: 'Undo',
@@ -332,12 +373,14 @@ export default function Dashboard() {
         };
     setCosts(editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost]);
     setCostModal({ visible: false, editing: null });
+    feedback.success();
     await persistCost(cost);
   };
 
   const deleteCost = async (cost: Cost) => {
     setCostModal({ visible: false, editing: null });
     setCosts((prev) => prev.filter((c) => c.id !== cost.id));
+    feedback.destroy();
     await removeCost(cost.id);
     showToast(`Deleted ${cost.name}`, {
       label: 'Undo',
@@ -351,24 +394,34 @@ export default function Dashboard() {
   // ── Add / Remove money flow ───────────────────────────────────────────────
   const openMoneyFlow = (mode: 'add' | 'remove') => {
     if (accounts.length === 0) {
+      feedback.error();
       Alert.alert('No accounts', 'Add a cash account first.');
       return;
     }
+    feedback.tap();
     setMoneyAmount('');
+    setMoneyNote('');
     setMoneyModal({ visible: true, mode });
   };
 
   const commitMoney = async (account: Account) => {
     const amount = parseAmt(moneyAmount);
     if (amount <= 0) return;
-    const delta = moneyModal.mode === 'add' ? amount : -amount;
+    const direction = moneyModal.mode === 'add' ? 'in' : 'out';
+    const delta = direction === 'in' ? amount : -amount;
     const updated: Account = {
       ...account,
       amount: String(parseAmt(account.amount) + delta),
     };
+    const note = moneyNote.trim() || null;
     setAccounts(accounts.map((a) => (a.id === account.id ? updated : a)));
     setMoneyModal({ visible: false, mode: moneyModal.mode });
-    await persistAccount(updated);
+    if (direction === 'in') feedback.moneyIn();
+    else feedback.moneyOut();
+    await Promise.all([
+      persistAccount(updated),
+      logTransaction({ accountId: account.id, amount, direction, kind: 'manual', note }),
+    ]);
   };
 
   // ── Pay / unpay flow ──────────────────────────────────────────────────────
@@ -385,10 +438,19 @@ export default function Dashboard() {
         };
         setAccounts(accounts.map((a) => (a.id === updatedAccount.id ? updatedAccount : a)));
         persistAccount(updatedAccount);
+        logTransaction({
+          accountId: refundTo.id,
+          amount: parseAmt(cost.amount),
+          direction: 'in',
+          kind: 'refund',
+          referenceId: cost.id,
+          note: cost.name,
+        });
       }
       const updated: Cost = { ...cost, paid: false, paidFromAccountId: null, paidMonth: null };
       setCosts(costs.map((c) => (c.id === cost.id ? updated : c)));
       persistCost(updated);
+      feedback.select();
       return;
     }
     // Not paid yet — ask which account to pay with
@@ -396,6 +458,7 @@ export default function Dashboard() {
       Alert.alert('No accounts', 'Add a cash account first so you can pay this cost.');
       return;
     }
+    feedback.tap();
     setAccountPicker({ visible: true, cost });
   };
 
@@ -415,7 +478,19 @@ export default function Dashboard() {
     setAccounts(accounts.map((a) => (a.id === account.id ? updatedAccount : a)));
     setCosts(costs.map((c) => (c.id === cost.id ? updatedCost : c)));
     setAccountPicker({ visible: false, cost: null });
-    await Promise.all([persistAccount(updatedAccount), persistCost(updatedCost)]);
+    feedback.success();
+    await Promise.all([
+      persistAccount(updatedAccount),
+      persistCost(updatedCost),
+      logTransaction({
+        accountId: account.id,
+        amount: parseAmt(cost.amount),
+        direction: 'out',
+        kind: 'cost',
+        referenceId: cost.id,
+        note: cost.name,
+      }),
+    ]);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -432,28 +507,35 @@ export default function Dashboard() {
               name="pencil-outline"
               size={15}
               color={editMode ? '#00C896' : '#777'}
+              style={editMode ? glowGreen : undefined}
             />
           </TouchableOpacity>
           <TouchableOpacity style={s.headerRemoveBtn} onPress={() => openMoneyFlow('remove')}>
-            <Ionicons name="remove" size={20} color="#FF6B6B" />
+            <Ionicons name="remove" size={20} color="#FFA94D" style={glowAmber} />
           </TouchableOpacity>
           <TouchableOpacity style={s.headerAddBtn} onPress={() => openMoneyFlow('add')}>
-            <Ionicons name="add" size={20} color="#00C896" />
+            <Ionicons name="add" size={20} color="#00C896" style={glowGreen} />
           </TouchableOpacity>
         </View>
       </View>
 
       <SortableScroll contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
-        <View style={s.heroCard}>
-          <Text style={s.heroLabel}>AFTER MONTHLY PAYMENTS</Text>
+        <TouchableOpacity style={s.heroCard} onPress={openHistory} activeOpacity={0.85}>
+          <View style={s.heroTopRow}>
+            <Text style={s.heroLabel}>AFTER MONTHLY PAYMENTS</Text>
+            <View style={s.historyHint}>
+              <Ionicons name="time-outline" size={11} color="#555" />
+              <Text style={s.historyHintText}>history</Text>
+            </View>
+          </View>
           <Text style={s.heroAmount}>{fmt(afterPayments, symbol)}</Text>
           <View style={s.heroDivider} />
           <View style={s.heroRow}>
             <Text style={s.heroSubLabel}>Current liquidity</Text>
             <Text style={s.heroSubValue}>{fmt(totalLiquid, symbol)}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Accounts */}
         <View style={s.card}>
@@ -512,8 +594,8 @@ export default function Dashboard() {
                 />
               )}
               <TouchableOpacity style={s.addCostRow} onPress={openAddAccount}>
-                <Ionicons name="add-circle-outline" size={16} color="#00C896" />
-                <Text style={s.addCostText}>Add Account</Text>
+                <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
+                <Text style={[s.addCostText, glowGreen]}>Add Account</Text>
               </TouchableOpacity>
             </>
           )}
@@ -572,6 +654,7 @@ export default function Dashboard() {
                           name={cost.paid ? 'checkmark-circle' : 'ellipse-outline'}
                           size={22}
                           color={cost.paid ? '#00C896' : '#3A3A3A'}
+                          style={cost.paid ? glowGreen : undefined}
                         />
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -607,8 +690,8 @@ export default function Dashboard() {
                 />
               )}
               <TouchableOpacity style={s.addCostRow} onPress={openAddCost}>
-                <Ionicons name="add-circle-outline" size={16} color="#00C896" />
-                <Text style={s.addCostText}>Add Cost</Text>
+                <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
+                <Text style={[s.addCostText, glowGreen]}>Add Cost</Text>
               </TouchableOpacity>
             </>
           )}
@@ -764,6 +847,14 @@ export default function Dashboard() {
                 keyboardType="decimal-pad"
                 autoFocus
               />
+              <TextInput
+                style={[s.input, { marginTop: -8 }]}
+                value={moneyNote}
+                onChangeText={setMoneyNote}
+                placeholder={moneyModal.mode === 'add' ? 'Optional: what for? (paycheck, refund…)' : 'Optional: what for? (groceries, rent…)'}
+                placeholderTextColor="#3A3A3A"
+                maxLength={200}
+              />
               <Text style={s.pickerSub}>
                 {parseAmt(moneyAmount) > 0
                   ? moneyModal.mode === 'add'
@@ -799,7 +890,8 @@ export default function Dashboard() {
                       <Ionicons
                         name={isAdd ? 'add-circle-outline' : 'remove-circle-outline'}
                         size={18}
-                        color={isAdd ? '#00C896' : '#FF6B6B'}
+                        color={isAdd ? '#00C896' : '#FFA94D'}
+                        style={isAdd ? glowGreen : glowAmber}
                       />
                     </TouchableOpacity>
                   );
@@ -853,6 +945,178 @@ export default function Dashboard() {
           </View>
         </View>
       </Modal>
+
+      {/* Money log — bank-statement-style read-only history */}
+      <Modal visible={historyVisible} transparent animationType="slide">
+        <View style={s.overlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setHistoryVisible(false)}
+          />
+          <View style={s.sheet}>
+            <View style={s.dragHandleBar} />
+            <View style={s.sheetHeaderRow}>
+              <Text style={[s.sheetTitle, { marginBottom: 0 }]}>Money log</Text>
+              <TouchableOpacity style={s.closeIconBtn} onPress={() => setHistoryVisible(false)}>
+                <Ionicons name="close" size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+            {transactions.length === 0 ? (
+              <View style={s.txEmpty}>
+                <Ionicons name="time-outline" size={28} color="#333" />
+                <Text style={s.txEmptyText}>No activity yet</Text>
+                <Text style={s.txEmptyHint}>
+                  Every + / − and every cost paid will appear here.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
+                {(() => {
+                  const groups: { month: string; rows: Transaction[] }[] = [];
+                  let lastMonth = '';
+                  for (const tx of transactions) {
+                    const m = txMonthKey(tx.createdAt);
+                    if (m !== lastMonth) {
+                      groups.push({ month: m, rows: [] });
+                      lastMonth = m;
+                    }
+                    groups[groups.length - 1].rows.push(tx);
+                  }
+
+                  const openStatement = (g: { month: string; rows: Transaction[] }) => {
+                    const sample = new Date(g.rows[0].createdAt);
+                    feedback.tap();
+                    setHistoryVisible(false);
+                    setStatement({
+                      visible: true,
+                      year: sample.getFullYear(),
+                      month: sample.getMonth(),
+                      label: g.month,
+                    });
+                  };
+
+                  const renderMonthHeader = (
+                    g: { month: string; rows: Transaction[] },
+                    monthIn: number,
+                    monthOut: number,
+                  ) => (
+                    <TouchableOpacity
+                      style={s.txGroupHeader}
+                      onPress={() => openStatement(g)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={s.txGroupHeaderLeft}>
+                        <Text style={s.txGroupMonth}>{g.month}</Text>
+                        <Ionicons name="chevron-forward" size={12} color="#444" style={{ marginLeft: 4 }} />
+                      </View>
+                      <View style={s.txGroupTotals}>
+                        <Text style={[s.txGroupTotal, glowGreen]}>+{fmt(monthIn, symbol)}</Text>
+                        <Text style={s.txGroupSep}>·</Text>
+                        <Text style={[s.txGroupTotal, { color: '#FFA94D' }, glowAmber]}>
+                          −{fmt(monthOut, symbol)}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+
+                  const current = groups[0];
+                  const past = groups.slice(1);
+
+                  const currentIn = current
+                    ? current.rows.filter((t) => t.direction === 'in').reduce((s, t) => s + t.amount, 0)
+                    : 0;
+                  const currentOut = current
+                    ? current.rows.filter((t) => t.direction === 'out').reduce((s, t) => s + t.amount, 0)
+                    : 0;
+
+                  return (
+                    <>
+                      {current && (
+                        <View style={s.txGroup}>
+                          <Text style={s.txSectionLabel}>THIS MONTH</Text>
+                          {renderMonthHeader(current, currentIn, currentOut)}
+                          {current.rows.map((tx, i) => {
+                            const account = accounts.find((a) => a.id === tx.accountId);
+                            const isIn = tx.direction === 'in';
+                            const kindLabel =
+                              tx.kind === 'cost'
+                                ? 'paid'
+                                : tx.kind === 'refund'
+                                  ? 'refunded'
+                                  : isIn
+                                    ? 'added'
+                                    : 'removed';
+                            return (
+                              <View
+                                key={tx.id}
+                                style={[s.txRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={s.txTitle} numberOfLines={1}>
+                                    {tx.note ?? `${kindLabel.charAt(0).toUpperCase()}${kindLabel.slice(1)}`}
+                                  </Text>
+                                  <Text style={s.txMeta}>
+                                    {txDayLabel(tx.createdAt)}
+                                    {account ? ` · ${account.name}` : ''}
+                                    {tx.note ? ` · ${kindLabel}` : ''}
+                                  </Text>
+                                </View>
+                                <Text
+                                  style={[
+                                    s.txAmount,
+                                    isIn ? glowGreen : glowAmber,
+                                    { color: isIn ? '#00C896' : '#FFA94D' },
+                                  ]}
+                                >
+                                  {isIn ? '+' : '−'}
+                                  {fmt(tx.amount, symbol)}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+
+                      {past.length > 0 && (
+                        <View style={s.txGroup}>
+                          <Text style={s.txSectionLabel}>PREVIOUS</Text>
+                          {past.map((g, i) => {
+                            const monthIn = g.rows.filter((t) => t.direction === 'in').reduce((s, t) => s + t.amount, 0);
+                            const monthOut = g.rows.filter((t) => t.direction === 'out').reduce((s, t) => s + t.amount, 0);
+                            return (
+                              <View
+                                key={g.month}
+                                style={i > 0 ? { borderTopWidth: 1, borderTopColor: '#1C1C1C' } : undefined}
+                              >
+                                {renderMonthHeader(g, monthIn, monthOut)}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </>
+                  );
+                })()}
+                <View style={{ height: 20 }} />
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {statement.visible && (
+        <StatementSheet
+          visible={statement.visible}
+          monthLabel={statement.label}
+          monthYear={statement.year}
+          monthIndex={statement.month}
+          transactions={transactions}
+          accounts={accounts}
+          symbol={symbol}
+          onClose={() => setStatement((sx) => ({ ...sx, visible: false }))}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -879,19 +1143,24 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 3,
   },
   headerRemoveBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#1F0D0D',
+    backgroundColor: '#1F1610',
     borderWidth: 1,
-    borderColor: '#3A1818',
+    borderColor: '#3A2A18',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#FFA94D',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
   },
   headerEditBtn: {
     width: 32,
@@ -908,9 +1177,9 @@ const s = StyleSheet.create({
     borderColor: '#1F3A30',
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 3,
   },
   scroll: { paddingHorizontal: 16 },
   heroCard: {
@@ -921,16 +1190,19 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#222',
   },
-  heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5, marginBottom: 10 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5 },
+  historyHint: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  historyHintText: { fontSize: 10, color: '#555', fontWeight: '500', letterSpacing: 0.5 },
   heroAmount: {
     fontSize: 40,
     fontWeight: '800',
     color: '#00C896',
     letterSpacing: -1.2,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.45)',
+    textShadowColor: 'rgba(0, 200, 150, 0.25)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
+    textShadowRadius: 14,
   },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -1099,9 +1371,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 
@@ -1126,5 +1398,42 @@ const s = StyleSheet.create({
   },
   pickerName: { fontSize: 15, fontWeight: '600', color: '#FFF' },
   pickerBalance: { fontSize: 12, color: '#555', marginTop: 3, fontWeight: '500', fontVariant: ['tabular-nums'] },
-  pickerNegative: { color: '#FF6B6B' },
+  pickerNegative: { color: '#FFA94D' },
+
+  // Money log (history sheet)
+  txEmpty: { alignItems: 'center', paddingVertical: 40, gap: 10 },
+  txEmptyText: { fontSize: 14, color: '#666', fontWeight: '600' },
+  txEmptyHint: { fontSize: 12, color: '#444', fontWeight: '500', textAlign: 'center', paddingHorizontal: 32 },
+  txGroup: { marginBottom: 14 },
+  txSectionLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#444',
+    letterSpacing: 1.5,
+    paddingHorizontal: 4,
+    paddingTop: 6,
+    paddingBottom: 4,
+  },
+  txGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    paddingVertical: 10,
+  },
+  txGroupHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+  txGroupMonth: { fontSize: 11, fontWeight: '700', color: '#666', letterSpacing: 1 },
+  txGroupTotals: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  txGroupTotal: { fontSize: 11, fontWeight: '600', color: '#00C896', fontVariant: ['tabular-nums'] },
+  txGroupSep: { fontSize: 11, color: '#333' },
+  txRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    gap: 12,
+  },
+  txTitle: { fontSize: 14, color: '#EEE', fontWeight: '500' },
+  txMeta: { fontSize: 11, color: '#555', marginTop: 2, fontWeight: '500' },
+  txAmount: { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
 });

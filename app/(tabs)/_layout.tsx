@@ -40,7 +40,7 @@ export default function TabLayout() {
           borderTopColor: '#1C1C1C',
           paddingBottom: 4,
         },
-        tabBarActiveTintColor: '#00C896',
+        tabBarActiveTintColor: '#FFF',
         tabBarInactiveTintColor: '#555',
         tabBarShowLabel: false,
       }}

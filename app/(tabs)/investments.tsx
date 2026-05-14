@@ -20,6 +20,7 @@ import {
   refreshInvestments,
   saveInvestments,
 } from '../../lib/investments';
+import { feedback } from '../../lib/feedback';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -58,9 +59,10 @@ export default function Investments() {
     startMonth: String(new Date().getMonth() + 1),
     startYear: String(new Date().getFullYear()),
     annualReturn: '7',
+    showProjections: false,
   });
   const [currency, setCurrency] = useState('RON');
-  const [yearlyExpanded, setYearlyExpanded] = useState(false);
+  const [yearlyExpanded, setYearlyExpanded] = useState(true);
 
   // Tap-to-edit modal for the whole portfolio (total + start date + rate)
   const [editVisible, setEditVisible] = useState(false);
@@ -68,6 +70,7 @@ export default function Investments() {
   const [formMonth, setFormMonth] = useState('');
   const [formYear, setFormYear] = useState('');
   const [formReturn, setFormReturn] = useState('');
+  const [formShowProjections, setFormShowProjections] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -116,6 +119,8 @@ export default function Investments() {
     setFormMonth(data.startMonth);
     setFormYear(data.startYear);
     setFormReturn(data.annualReturn);
+    setFormShowProjections(data.showProjections);
+    feedback.tap();
     setEditVisible(true);
   };
 
@@ -125,8 +130,10 @@ export default function Investments() {
       startMonth: formMonth || '1',
       startYear: formYear || String(new Date().getFullYear()),
       annualReturn: formReturn || '7',
+      showProjections: formShowProjections,
     };
     setData(next);
+    feedback.success();
     await saveInvestments(next);
     setEditVisible(false);
   };
@@ -143,24 +150,28 @@ export default function Investments() {
           <Text style={s.heroLabel}>TOTAL INVESTED</Text>
           <Text style={s.heroAmount}>{fmt(pv, symbol)}</Text>
           {pv > 0 ? (
-            <>
-              <View style={s.heroDivider} />
-              <View style={s.heroRow}>
-                <Text style={s.heroSubLabel}>Avg monthly</Text>
-                <Text style={s.heroSubValue}>{fmtFull(pmt, symbol)}</Text>
-              </View>
-              <View style={[s.heroRow, { marginTop: 6 }]}>
-                <Text style={s.heroSubLabel}>Since {startLabel} · {data.annualReturn || '7'}%</Text>
-                <Text style={s.heroSubMeta}>tap to edit</Text>
-              </View>
-            </>
+            data.showProjections ? (
+              <>
+                <View style={s.heroDivider} />
+                <View style={s.heroRow}>
+                  <Text style={s.heroSubLabel}>Avg monthly</Text>
+                  <Text style={s.heroSubValue}>{fmtFull(pmt, symbol)}</Text>
+                </View>
+                <View style={[s.heroRow, { marginTop: 6 }]}>
+                  <Text style={s.heroSubLabel}>Since {startLabel} · {data.annualReturn || '7'}%</Text>
+                  <Text style={s.heroSubMeta}>tap to edit</Text>
+                </View>
+              </>
+            ) : (
+              <Text style={s.heroSubMetaCenter}>tap to edit</Text>
+            )
           ) : (
             <Text style={s.heroEmpty}>Tap to set up your portfolio</Text>
           )}
         </TouchableOpacity>
 
         {/* 1yr / 5yr / 10yr projections */}
-        {pv > 0 && (
+        {pv > 0 && data.showProjections && (
           <View style={s.projRow}>
             {[
               { label: '1 YEAR', value: val1y },
@@ -177,7 +188,7 @@ export default function Investments() {
         )}
 
         {/* Yearly breakdown */}
-        {pv > 0 && (
+        {pv > 0 && data.showProjections && (
           <View style={s.card}>
             <TouchableOpacity
               style={s.collapseHeader}
@@ -241,41 +252,66 @@ export default function Investments() {
                   autoFocus
                 />
 
-                <Text style={s.label}>STARTED INVESTING</Text>
-                <View style={s.monthGrid}>
-                  {MONTH_LABELS.map((m, i) => {
-                    const active = formMonth === String(i + 1);
-                    return (
-                      <TouchableOpacity
-                        key={m}
-                        style={[s.monthBtn, active && s.monthBtnActive]}
-                        onPress={() => setFormMonth(String(i + 1))}
-                      >
-                        <Text style={[s.monthBtnText, active && s.monthBtnTextActive]}>{m}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <TextInput
-                  style={[s.input, { marginTop: 10 }]}
-                  value={formYear}
-                  onChangeText={setFormYear}
-                  placeholder="2025"
-                  placeholderTextColor="#3A3A3A"
-                  keyboardType="number-pad"
-                  maxLength={4}
-                />
+                <TouchableOpacity
+                  style={s.toggleRow}
+                  onPress={() => {
+                    feedback.select();
+                    setFormShowProjections(!formShowProjections);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.toggleTitle}>Show growth projections</Text>
+                    <Text style={s.toggleHint}>
+                      {formShowProjections
+                        ? 'Avg monthly, 1y/5y/10y, and yearly breakdown'
+                        : 'Just track the total. Turn on for compound math.'}
+                    </Text>
+                  </View>
+                  <View style={[s.switch, formShowProjections && s.switchOn]}>
+                    <View style={[s.switchKnob, formShowProjections && s.switchKnobOn]} />
+                  </View>
+                </TouchableOpacity>
 
-                <Text style={s.label}>EXPECTED ANNUAL RETURN (%)</Text>
-                <TextInput
-                  style={s.input}
-                  value={formReturn}
-                  onChangeText={setFormReturn}
-                  placeholder="7"
-                  placeholderTextColor="#3A3A3A"
-                  keyboardType="decimal-pad"
-                />
-                <Text style={s.hint}>7% is recommended for most stock market investments</Text>
+                {formShowProjections && (
+                  <>
+                    <Text style={s.label}>STARTED INVESTING</Text>
+                    <View style={s.monthGrid}>
+                      {MONTH_LABELS.map((m, i) => {
+                        const active = formMonth === String(i + 1);
+                        return (
+                          <TouchableOpacity
+                            key={m}
+                            style={[s.monthBtn, active && s.monthBtnActive]}
+                            onPress={() => setFormMonth(String(i + 1))}
+                          >
+                            <Text style={[s.monthBtnText, active && s.monthBtnTextActive]}>{m}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <TextInput
+                      style={[s.input, { marginTop: 10 }]}
+                      value={formYear}
+                      onChangeText={setFormYear}
+                      placeholder="2025"
+                      placeholderTextColor="#3A3A3A"
+                      keyboardType="number-pad"
+                      maxLength={4}
+                    />
+
+                    <Text style={s.label}>EXPECTED ANNUAL RETURN (%)</Text>
+                    <TextInput
+                      style={s.input}
+                      value={formReturn}
+                      onChangeText={setFormReturn}
+                      placeholder="7"
+                      placeholderTextColor="#3A3A3A"
+                      keyboardType="decimal-pad"
+                    />
+                    <Text style={s.hint}>7% is recommended for most stock market investments</Text>
+                  </>
+                )}
               </ScrollView>
 
               <View style={s.sheetActions}>
@@ -322,15 +358,24 @@ const s = StyleSheet.create({
     color: '#00C896',
     letterSpacing: -1.2,
     fontVariant: ['tabular-nums'],
-    textShadowColor: 'rgba(0, 200, 150, 0.45)',
+    textShadowColor: 'rgba(0, 200, 150, 0.25)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 16,
+    textShadowRadius: 14,
   },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroSubLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
-  heroSubValue: { fontSize: 17, fontWeight: '700', color: '#00C896', fontVariant: ['tabular-nums'] },
+  heroSubValue: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#00C896',
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
   heroSubMeta: { fontSize: 11, color: '#444', fontWeight: '500' },
+  heroSubMetaCenter: { fontSize: 11, color: '#444', fontWeight: '500', marginTop: 16, textAlign: 'center' },
   heroEmpty: { fontSize: 13, color: '#444', marginTop: 12, fontWeight: '500' },
 
   // Projection cards
@@ -353,7 +398,15 @@ const s = StyleSheet.create({
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
-  projGain: { fontSize: 11, color: '#00C896', fontWeight: '500', fontVariant: ['tabular-nums'] },
+  projGain: {
+    fontSize: 11,
+    color: '#00C896',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
 
   // Yearly breakdown
   card: {
@@ -389,7 +442,13 @@ const s = StyleSheet.create({
   cellYear: { flex: 0.4, textAlign: 'left' },
   yearNum: { fontSize: 13, fontWeight: '600', color: '#666', fontVariant: ['tabular-nums'] },
   dimText: { color: '#666' },
-  greenText: { color: '#00C896', fontWeight: '500' },
+  greenText: {
+    color: '#00C896',
+    fontWeight: '500',
+    textShadowColor: 'rgba(0, 200, 150, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
   boldText: { color: '#EEE', fontWeight: '600' },
 
   // Modal
@@ -428,6 +487,37 @@ const s = StyleSheet.create({
   },
   hint: { fontSize: 11, color: '#444', marginTop: -10, marginBottom: 18, fontWeight: '500' },
 
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    marginBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#222',
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  toggleTitle: { fontSize: 14, color: '#EEE', fontWeight: '600' },
+  toggleHint: { fontSize: 11, color: '#555', marginTop: 4, lineHeight: 14, fontWeight: '500' },
+  switch: {
+    width: 38,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#2A2A2A',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  switchOn: { backgroundColor: '#00C896' },
+  switchKnob: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFF',
+    alignSelf: 'flex-start',
+  },
+  switchKnobOn: { alignSelf: 'flex-end' },
+
   monthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
   monthBtn: {
     paddingHorizontal: 10,
@@ -458,9 +548,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     shadowColor: '#00C896',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 });
