@@ -424,8 +424,8 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
-  profileName: { fontSize: 16, fontWeight: '600', color: '#FFF', marginBottom: 4 },
-  profileSub: { fontSize: 12, color: '#444', marginBottom: 16 },
+  profileName: { fontSize: 17, fontWeight: '700', color: '#FFF', marginBottom: 4, letterSpacing: -0.3 },
+  profileSub: { fontSize: 12, color: '#444', marginBottom: 16, fontWeight: '500' },
   signOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -465,10 +465,10 @@ const s = StyleSheet.create({
   },
   addRow: { borderTopWidth: 1, borderTopColor: '#1C1C1C' },
   rowIcon: { width: 24, alignItems: 'center' },
-  rowLabel: { flex: 1, fontSize: 14, color: '#CCC', fontWeight: '400' },
+  rowLabel: { flex: 1, fontSize: 14, color: '#CCC', fontWeight: '500' },
   rowRight: { flexDirection: 'row', alignItems: 'center' },
-  rowValue: { fontSize: 13, color: '#555' },
-  currentTag: { fontSize: 11, color: '#3A6A5A', fontWeight: '400' },
+  rowValue: { fontSize: 13, color: '#555', fontWeight: '500' },
+  currentTag: { fontSize: 11, color: '#3A6A5A', fontWeight: '500' },
 
   // Subtle "Customize per page" row inside the currency card
   subtleRow: {
@@ -476,8 +476,8 @@ const s = StyleSheet.create({
     borderTopColor: '#1C1C1C',
     paddingVertical: 11,
   },
-  subtleLabel: { flex: 1, fontSize: 12, color: '#555', fontWeight: '400' },
-  subtleHint: { fontSize: 10, color: '#333', marginTop: 2 },
+  subtleLabel: { flex: 1, fontSize: 12, color: '#555', fontWeight: '500' },
+  subtleHint: { fontSize: 10, color: '#333', marginTop: 2, fontWeight: '500' },
   enabledTag: {
     fontSize: 9,
     color: '#00C896',
@@ -512,7 +512,7 @@ const s = StyleSheet.create({
   },
   tabRowTitle: { fontSize: 14, fontWeight: '600', color: '#EEE' },
   tabRowTitleDim: { color: '#666' },
-  tabRowDesc: { fontSize: 11, color: '#444', marginTop: 2, lineHeight: 14 },
+  tabRowDesc: { fontSize: 11, color: '#444', marginTop: 2, lineHeight: 14, fontWeight: '500' },
 
   // Prominent CTA when revenue tracking is disabled
   ctaCard: {
@@ -535,8 +535,8 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 14,
   },
-  ctaTitle: { fontSize: 17, fontWeight: '700', color: '#FFF', marginBottom: 6 },
-  ctaSub: { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 18 },
+  ctaTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 6, letterSpacing: -0.3 },
+  ctaSub: { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 18, fontWeight: '500' },
   ctaBtn: {
     backgroundColor: '#00C896',
     paddingHorizontal: 18,
@@ -544,6 +544,11 @@ const s = StyleSheet.create({
     borderRadius: 10,
     alignSelf: 'stretch',
     alignItems: 'center',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 5,
   },
   ctaBtnText: { fontSize: 14, fontWeight: '700', color: '#000' },
   overrideBadge: {
@@ -570,7 +575,7 @@ const s = StyleSheet.create({
   pageRowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pageRowValue: { fontSize: 14, color: '#888', fontWeight: '500' },
   pageRowOverride: { color: '#00C896' },
-  pageRowHint: { fontSize: 10, color: '#444', letterSpacing: 0.5 },
+  pageRowHint: { fontSize: 10, color: '#444', letterSpacing: 0.5, fontWeight: '500' },
   divider: { height: 1, backgroundColor: '#222', marginVertical: 8 },
 
   // Back nav inside the per-page sheet
@@ -590,8 +595,8 @@ const s = StyleSheet.create({
     borderBottomWidth: 0,
     borderColor: '#2C2C2C',
   },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 10 },
-  sheetSub: { fontSize: 13, color: '#555', marginBottom: 18, lineHeight: 18 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', marginBottom: 10, letterSpacing: -0.3 },
+  sheetSub: { fontSize: 13, color: '#555', marginBottom: 18, lineHeight: 18, fontWeight: '500' },
   inputLabel: {
     fontSize: 11,
     fontWeight: '600',
@@ -610,6 +615,7 @@ const s = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#2C2C2C',
+    fontWeight: '500',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -618,7 +624,7 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
   },
-  toggleText: { fontSize: 14, color: '#CCC' },
+  toggleText: { fontSize: 14, color: '#CCC', fontWeight: '500' },
 
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {
@@ -635,6 +641,11 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 6,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 
@@ -649,9 +660,9 @@ const s = StyleSheet.create({
     marginBottom: 2,
   },
   currencyRowActive: { backgroundColor: '#222' },
-  currencySymbol: { fontSize: 18, color: '#FFF', width: 28, textAlign: 'center' },
+  currencySymbol: { fontSize: 18, color: '#FFF', width: 28, textAlign: 'center', fontWeight: '600' },
   currencyCode: { fontSize: 14, fontWeight: '600', color: '#FFF' },
-  currencyName: { fontSize: 12, color: '#555', marginTop: 1 },
+  currencyName: { fontSize: 12, color: '#555', marginTop: 1, fontWeight: '500' },
   closeBtn: {
     marginTop: 10,
     paddingVertical: 14,

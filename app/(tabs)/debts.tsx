@@ -43,6 +43,7 @@ function parseAmt(s: string): number {
 export default function Debts() {
   const [debts, setDebts] = useState<Debt[]>([]);
   const [currency, setCurrency] = useState('RON');
+  const [editMode, setEditMode] = useState(false);
 
   const [modal, setModal] = useState<{ visible: boolean; editing: Debt | null }>({
     visible: false,
@@ -123,22 +124,28 @@ export default function Debts() {
   const renderDebtItem = useCallback(
     ({ item: debt, drag, isActive }: RenderItemParams<Debt>) => (
       <View style={[s.row, isActive && s.rowDragging]}>
-        {debts.length > 1 && (
+        {editMode && debts.length > 1 && (
           <TouchableOpacity onLongPress={drag} delayLongPress={120} style={s.dragHandle}>
             <Ionicons name="reorder-three-outline" size={18} color="#444" />
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={s.rowBody} onPress={() => openEdit(debt)}>
+        <TouchableOpacity
+          style={s.rowBody}
+          onPress={editMode ? () => openEdit(debt) : undefined}
+          activeOpacity={editMode ? 0.2 : 1}
+        >
           <View style={{ flex: 1 }}>
             <Text style={s.rowLabel}>{debt.name}</Text>
             {debt.notes ? <Text style={s.rowMeta}>{debt.notes}</Text> : null}
           </View>
           <Text style={s.rowValue}>{fmt(parseAmt(debt.amount), symbol)}</Text>
-          <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+          {editMode && (
+            <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+          )}
         </TouchableOpacity>
       </View>
     ),
-    [debts.length, symbol],
+    [debts.length, symbol, editMode],
   );
 
   const removeFromModal = async () => {
@@ -160,6 +167,16 @@ export default function Debts() {
     <SafeAreaView style={s.container}>
       <View style={s.header}>
         <Text style={s.headerTitle}>DEBTS</Text>
+        <TouchableOpacity
+          style={[s.headerEditBtn, editMode && s.headerEditBtnActive]}
+          onPress={() => setEditMode((e) => !e)}
+        >
+          <Ionicons
+            name="pencil-outline"
+            size={15}
+            color={editMode ? '#00C896' : '#777'}
+          />
+        </TouchableOpacity>
       </View>
 
       <SortableScroll contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
@@ -196,21 +213,27 @@ export default function Debts() {
                   return (
                     <DraggableRow
                       key={debt.id}
-                      handlers={{ ...d, draggable: d.draggable && debts.length > 1 }}
+                      handlers={{ ...d, draggable: d.draggable && editMode && debts.length > 1 }}
                       style={[s.row, d.isDragging && s.rowDragging, d.isHovered && s.rowDropTarget]}
                     >
-                      {debts.length > 1 && (
+                      {editMode && debts.length > 1 && (
                         <View style={s.dragHandle}>
                           <Ionicons name="reorder-three-outline" size={18} color="#444" />
                         </View>
                       )}
-                      <TouchableOpacity style={s.rowBody} onPress={() => openEdit(debt)}>
+                      <TouchableOpacity
+                        style={s.rowBody}
+                        onPress={editMode ? () => openEdit(debt) : undefined}
+                        activeOpacity={editMode ? 0.2 : 1}
+                      >
                         <View style={{ flex: 1 }}>
                           <Text style={s.rowLabel}>{debt.name}</Text>
                           {debt.notes ? <Text style={s.rowMeta}>{debt.notes}</Text> : null}
                         </View>
                         <Text style={s.rowValue}>{fmt(parseAmt(debt.amount), symbol)}</Text>
-                        <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+                        {editMode && (
+                          <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+                        )}
                       </TouchableOpacity>
                     </DraggableRow>
                   );
@@ -295,8 +318,33 @@ export default function Debts() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
-  header: { paddingHorizontal: 20, paddingVertical: 14 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
+  headerEditBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#161616',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerEditBtnActive: {
+    backgroundColor: '#0D1F1A',
+    borderColor: '#1F3A30',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 4,
+  },
   scroll: { paddingHorizontal: 16 },
 
   heroCard: {
@@ -308,10 +356,19 @@ const s = StyleSheet.create({
     borderColor: '#222',
   },
   heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5, marginBottom: 10 },
-  heroAmount: { fontSize: 38, fontWeight: '700', color: '#FF6B6B', letterSpacing: -1 },
+  heroAmount: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#FF6B6B',
+    letterSpacing: -1.2,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(255, 107, 107, 0.45)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 16,
+  },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroSubLabel: { fontSize: 13, color: '#555' },
+  heroSubLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
 
   card: {
     backgroundColor: '#151515',
@@ -349,9 +406,9 @@ const s = StyleSheet.create({
   },
   rowDragging: { opacity: 0.35 },
   rowDropTarget: { borderTopWidth: 2, borderTopColor: '#00C896' },
-  rowLabel: { fontSize: 15, color: '#EEE', fontWeight: '400' },
-  rowMeta: { fontSize: 11, color: '#555', marginTop: 2 },
-  rowValue: { fontSize: 14, color: '#FF6B6B', fontWeight: '500' },
+  rowLabel: { fontSize: 15, color: '#EEE', fontWeight: '500' },
+  rowMeta: { fontSize: 11, color: '#555', marginTop: 2, fontWeight: '500' },
+  rowValue: { fontSize: 14, color: '#FF6B6B', fontWeight: '500', fontVariant: ['tabular-nums'] },
 
   empty: {
     alignItems: 'center',
@@ -360,7 +417,7 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1C1C1C',
   },
-  emptyText: { fontSize: 13, color: '#3A3A3A' },
+  emptyText: { fontSize: 13, color: '#3A3A3A', fontWeight: '500' },
 
   addRow: {
     flexDirection: 'row',
@@ -384,7 +441,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 0,
     borderColor: '#2C2C2C',
   },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 16 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', marginBottom: 16, letterSpacing: -0.3 },
   inputLabel: {
     fontSize: 11,
     fontWeight: '600',
@@ -403,6 +460,7 @@ const s = StyleSheet.create({
     marginBottom: 18,
     borderWidth: 1,
     borderColor: '#2C2C2C',
+    fontWeight: '500',
   },
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {
@@ -419,6 +477,11 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 6,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
   deleteLink: {

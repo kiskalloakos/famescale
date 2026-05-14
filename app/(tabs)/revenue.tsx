@@ -528,18 +528,28 @@ const s = StyleSheet.create({
   },
   currentPillText: { fontSize: 9, color: '#00C896', fontWeight: '700', letterSpacing: 1 },
 
-  heroAmount: { fontSize: 44, fontWeight: '700', color: '#FFF', letterSpacing: -1, marginTop: 12 },
+  heroAmount: {
+    fontSize: 46,
+    fontWeight: '800',
+    color: '#00C896',
+    letterSpacing: -1.4,
+    marginTop: 12,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0, 200, 150, 0.45)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 16,
+  },
 
   growthRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  growthText: { fontSize: 13, fontWeight: '500' },
+  growthText: { fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'] },
 
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroFooterLabel: { fontSize: 13, color: '#555' },
-  heroFooterValue: { fontSize: 15, fontWeight: '600', color: '#AAA' },
+  heroFooterLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
+  heroFooterValue: { fontSize: 15, fontWeight: '700', color: '#AAA', fontVariant: ['tabular-nums'] },
 
   editHint: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 16, justifyContent: 'center' },
-  editHintText: { fontSize: 11, color: '#444' },
+  editHintText: { fontSize: 11, color: '#444', fontWeight: '500' },
 
   // Stats row (monthly avg, best month)
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
@@ -552,8 +562,8 @@ const s = StyleSheet.create({
     borderColor: '#222',
   },
   statLabel: { fontSize: 9, fontWeight: '700', color: '#555', letterSpacing: 1.2, marginBottom: 8 },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#FFF' },
-  statSub: { fontSize: 11, color: '#444', marginTop: 3 },
+  statValue: { fontSize: 18, fontWeight: '800', color: '#FFF', fontVariant: ['tabular-nums'] },
+  statSub: { fontSize: 11, color: '#444', marginTop: 3, fontWeight: '500' },
 
   // Monthly breakdown grid
   breakdownCard: {
@@ -568,10 +578,10 @@ const s = StyleSheet.create({
   breakdownGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   breakdownItem: { width: '25%', paddingVertical: 8 },
   breakdownMonth: { fontSize: 10, fontWeight: '600', color: '#444', letterSpacing: 1, marginBottom: 3 },
-  breakdownAmount: { fontSize: 13, fontWeight: '500', color: '#CCC' },
-  breakdownEmpty: { color: '#2A2A2A', fontWeight: '400' },
+  breakdownAmount: { fontSize: 13, fontWeight: '500', color: '#CCC', fontVariant: ['tabular-nums'] },
+  breakdownEmpty: { color: '#2A2A2A', fontWeight: '500' },
 
-  footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 8, lineHeight: 18 },
+  footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 8, lineHeight: 18, fontWeight: '500' },
 
   // New-year reminder banner
   banner: {
@@ -587,12 +597,17 @@ const s = StyleSheet.create({
     marginBottom: 14,
   },
   bannerTitle: { fontSize: 13, fontWeight: '700', color: '#FFF' },
-  bannerSub: { fontSize: 11, color: '#555', marginTop: 2, lineHeight: 14 },
+  bannerSub: { fontSize: 11, color: '#555', marginTop: 2, lineHeight: 14, fontWeight: '500' },
   bannerBtn: {
     backgroundColor: '#00C896',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 4,
   },
   bannerBtnText: { fontSize: 12, fontWeight: '700', color: '#000' },
   bannerClose: { padding: 4 },
@@ -634,8 +649,8 @@ const s = StyleSheet.create({
   historyDot: { width: 18, alignItems: 'center' },
   historyLabel: { flex: 1, fontSize: 14, color: '#CCC', fontWeight: '500' },
   historyLabelActive: { color: '#00C896', fontWeight: '600' },
-  historyCurrentTag: { fontSize: 11, color: '#3A6A5A', fontWeight: '400' },
-  historyAmount: { fontSize: 14, color: '#888' },
+  historyCurrentTag: { fontSize: 11, color: '#3A6A5A', fontWeight: '500' },
+  historyAmount: { fontSize: 14, color: '#888', fontWeight: '500', fontVariant: ['tabular-nums'] },
 
   // Entry modal extras
   inputLabel: {
@@ -656,6 +671,7 @@ const s = StyleSheet.create({
     marginBottom: 20,
     borderWidth: 1,
     borderColor: '#2C2C2C',
+    fontWeight: '500',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -664,7 +680,7 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
   },
-  toggleText: { fontSize: 14, color: '#CCC' },
+  toggleText: { fontSize: 14, color: '#CCC', fontWeight: '500' },
 
   // Modal
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
@@ -686,10 +702,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
     marginBottom: 16,
   },
-  sheetTitle: { fontSize: 17, fontWeight: '700', color: '#FFF' },
+  sheetTitle: { fontSize: 19, fontWeight: '700', color: '#FFF', letterSpacing: -0.3 },
   liveTotal: { alignItems: 'flex-end' },
   liveTotalLabel: { fontSize: 9, fontWeight: '700', color: '#555', letterSpacing: 1 },
-  liveTotalValue: { fontSize: 18, fontWeight: '700', color: '#00C896', marginTop: 2 },
+  liveTotalValue: { fontSize: 18, fontWeight: '800', color: '#00C896', marginTop: 2, fontVariant: ['tabular-nums'] },
 
   monthList: { marginBottom: 12 },
   monthRow: {
@@ -700,7 +716,7 @@ const s = StyleSheet.create({
     gap: 10,
   },
   monthLabel: { fontSize: 13, fontWeight: '600', color: '#888', width: 36 },
-  currencyHint: { fontSize: 13, color: '#444', width: 24, textAlign: 'right' },
+  currencyHint: { fontSize: 13, color: '#444', width: 24, textAlign: 'right', fontWeight: '500' },
   monthInput: {
     flex: 1,
     backgroundColor: '#222',
@@ -711,6 +727,8 @@ const s = StyleSheet.create({
     color: '#FFF',
     borderWidth: 1,
     borderColor: '#2C2C2C',
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
   },
 
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
@@ -728,6 +746,11 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 6,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 

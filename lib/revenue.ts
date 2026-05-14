@@ -86,7 +86,9 @@ export async function saveRevenue(state: RevenueState): Promise<void> {
   const toDelete = [...remoteIds].filter((id) => !localIds.has(id));
 
   if (toDelete.length > 0) {
-    await reportable(supabase.from('revenue_entries').delete().in('id', toDelete));
+    await reportable(
+      supabase.from('revenue_entries').delete().in('id', toDelete).eq('user_id', uid),
+    );
   }
 
   if (state.entries.length > 0) {

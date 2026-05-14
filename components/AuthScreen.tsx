@@ -45,8 +45,8 @@ export default function AuthScreen() {
       setError('Email and password are required.');
       return;
     }
-    if (mode === 'sign-up' && password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (mode === 'sign-up' && password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
 
@@ -133,7 +133,7 @@ export default function AuthScreen() {
                     style={s.input}
                     value={password}
                     onChangeText={setPassword}
-                    placeholder={mode === 'sign-up' ? 'At least 6 characters' : '••••••••'}
+                    placeholder={mode === 'sign-up' ? 'At least 8 characters' : '••••••••'}
                     placeholderTextColor="#3A3A3A"
                     secureTextEntry
                     autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
@@ -204,11 +204,23 @@ const s = StyleSheet.create({
   flex: { flex: 1 },
 
   brandBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  appName: { fontSize: 56, fontWeight: '700', color: '#FFF', letterSpacing: -2, marginBottom: 10 },
-  tagline: { fontSize: 14, color: '#444' },
+  appName: {
+    fontSize: 60,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: -2.5,
+    marginBottom: 10,
+  },
+  tagline: { fontSize: 14, color: '#444', fontWeight: '500' },
 
   form: { paddingHorizontal: 24, paddingBottom: 36 },
-  formTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', marginBottom: 24 },
+  formTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 24,
+    letterSpacing: -0.4,
+  },
 
   label: { fontSize: 10, fontWeight: '700', color: '#555', letterSpacing: 1.2, marginBottom: 8 },
   passwordHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -224,8 +236,9 @@ const s = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#222',
+    fontWeight: '500',
   },
-  resetHelp: { fontSize: 12, color: '#555', marginBottom: 16, marginTop: -8 },
+  resetHelp: { fontSize: 12, color: '#555', marginBottom: 16, marginTop: -8, fontWeight: '500' },
 
   errorBox: {
     flexDirection: 'row',
@@ -239,7 +252,7 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 14,
   },
-  errorText: { color: '#FF6B6B', fontSize: 13, flex: 1 },
+  errorText: { color: '#FF6B6B', fontSize: 13, flex: 1, fontWeight: '500' },
 
   primaryBtn: {
     backgroundColor: '#00C896',
@@ -247,18 +260,23 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 6,
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 6,
   },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
 
   switchBtn: { alignItems: 'center', paddingVertical: 16 },
-  switchText: { fontSize: 13, color: '#555' },
+  switchText: { fontSize: 13, color: '#555', fontWeight: '500' },
   switchLink: { color: '#00C896', fontWeight: '600' },
 
   // "Check your email" view
   sentBox: { alignItems: 'center', paddingTop: 12 },
-  sentTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginTop: 12, marginBottom: 10 },
-  sentText: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, marginBottom: 8 },
+  sentTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', marginTop: 12, marginBottom: 10, letterSpacing: -0.3 },
+  sentText: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20, marginBottom: 8, fontWeight: '500' },
   sentEmail: { color: '#CCC', fontWeight: '600' },
-  sentHint: { fontSize: 12, color: '#444', textAlign: 'center', marginBottom: 24, lineHeight: 17 },
+  sentHint: { fontSize: 12, color: '#444', textAlign: 'center', marginBottom: 24, lineHeight: 17, fontWeight: '500' },
 });

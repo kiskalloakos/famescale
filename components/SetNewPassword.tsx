@@ -21,8 +21,8 @@ export default function SetNewPassword() {
 
   const submit = async () => {
     setError(null);
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
     if (password !== confirm) {
@@ -60,7 +60,7 @@ export default function SetNewPassword() {
             style={s.input}
             value={password}
             onChangeText={setPassword}
-            placeholder="At least 6 characters"
+            placeholder="At least 8 characters"
             placeholderTextColor="#3A3A3A"
             secureTextEntry
             autoComplete="new-password"
@@ -112,11 +112,23 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   flex: { flex: 1 },
   brandBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  appName: { fontSize: 56, fontWeight: '700', color: '#FFF', letterSpacing: -2, marginBottom: 10 },
-  tagline: { fontSize: 14, color: '#444', textAlign: 'center' },
+  appName: {
+    fontSize: 60,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: -2.5,
+    marginBottom: 10,
+  },
+  tagline: { fontSize: 14, color: '#444', textAlign: 'center', fontWeight: '500' },
 
   form: { paddingHorizontal: 24, paddingBottom: 36 },
-  formTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', marginBottom: 24 },
+  formTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 24,
+    letterSpacing: -0.4,
+  },
 
   label: { fontSize: 10, fontWeight: '700', color: '#555', letterSpacing: 1.2, marginBottom: 8 },
   input: {
@@ -129,6 +141,7 @@ const s = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: '#222',
+    fontWeight: '500',
   },
 
   errorBox: {
@@ -143,7 +156,7 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 14,
   },
-  errorText: { color: '#FF6B6B', fontSize: 13, flex: 1 },
+  errorText: { color: '#FF6B6B', fontSize: 13, flex: 1, fontWeight: '500' },
 
   primaryBtn: {
     backgroundColor: '#00C896',
@@ -151,10 +164,15 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 6,
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 6,
   },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
 
   cancelBtn: { alignItems: 'center', paddingVertical: 14 },
-  cancelText: { fontSize: 13, color: '#555' },
+  cancelText: { fontSize: 13, color: '#555', fontWeight: '500' },
 });

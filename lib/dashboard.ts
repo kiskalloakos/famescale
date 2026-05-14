@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { supabase } from './supabase';
 import { load, save } from './storage';
 import { reportable } from './sync';
@@ -34,13 +35,10 @@ export interface DashboardData {
 const NS = 'dashboard';
 const EMPTY: DashboardData = { accounts: [], costs: [] };
 
-// Pure-JS UUID v4 (no native crypto module required)
+// CSPRNG-backed UUID v4 via expo-crypto (SecRandomCopyBytes on iOS,
+// SecureRandom on Android, window.crypto on web).
 export function newId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return Crypto.randomUUID();
 }
 
 async function userId(): Promise<string | null> {

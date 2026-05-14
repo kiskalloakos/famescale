@@ -316,13 +316,22 @@ const s = StyleSheet.create({
     letterSpacing: 1.5,
     marginBottom: 10,
   },
-  heroAmount: { fontSize: 38, fontWeight: '700', color: '#00C896', letterSpacing: -1 },
+  heroAmount: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#00C896',
+    letterSpacing: -1.2,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0, 200, 150, 0.45)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 16,
+  },
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroSubLabel: { fontSize: 13, color: '#555' },
-  heroSubValue: { fontSize: 17, fontWeight: '600', color: '#00C896' },
-  heroSubMeta: { fontSize: 11, color: '#444' },
-  heroEmpty: { fontSize: 13, color: '#444', marginTop: 12 },
+  heroSubLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
+  heroSubValue: { fontSize: 17, fontWeight: '700', color: '#00C896', fontVariant: ['tabular-nums'] },
+  heroSubMeta: { fontSize: 11, color: '#444', fontWeight: '500' },
+  heroEmpty: { fontSize: 13, color: '#444', marginTop: 12, fontWeight: '500' },
 
   // Projection cards
   projRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
@@ -338,12 +347,13 @@ const s = StyleSheet.create({
   projLabel: { fontSize: 9, fontWeight: '700', color: '#555', letterSpacing: 1, marginBottom: 8 },
   projValue: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFF',
     marginBottom: 4,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
-  projGain: { fontSize: 11, color: '#00C896', fontWeight: '500' },
+  projGain: { fontSize: 11, color: '#00C896', fontWeight: '500', fontVariant: ['tabular-nums'] },
 
   // Yearly breakdown
   card: {
@@ -374,10 +384,10 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1C1C1C',
   },
-  tableCell: { flex: 1, fontSize: 12, color: '#888', textAlign: 'right' },
+  tableCell: { flex: 1, fontSize: 12, color: '#888', textAlign: 'right', fontWeight: '500', fontVariant: ['tabular-nums'] },
   tableHeaderText: { fontSize: 9, fontWeight: '700', color: '#444', letterSpacing: 0.8 },
   cellYear: { flex: 0.4, textAlign: 'left' },
-  yearNum: { fontSize: 13, fontWeight: '600', color: '#666' },
+  yearNum: { fontSize: 13, fontWeight: '600', color: '#666', fontVariant: ['tabular-nums'] },
   dimText: { color: '#666' },
   greenText: { color: '#00C896', fontWeight: '500' },
   boldText: { color: '#EEE', fontWeight: '600' },
@@ -395,7 +405,7 @@ const s = StyleSheet.create({
     borderColor: '#2C2C2C',
     maxHeight: '85%',
   },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 20 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', marginBottom: 20, letterSpacing: -0.3 },
 
   label: {
     fontSize: 10,
@@ -414,8 +424,9 @@ const s = StyleSheet.create({
     marginBottom: 18,
     borderWidth: 1,
     borderColor: '#2A2A2A',
+    fontWeight: '500',
   },
-  hint: { fontSize: 11, color: '#444', marginTop: -10, marginBottom: 18 },
+  hint: { fontSize: 11, color: '#444', marginTop: -10, marginBottom: 18, fontWeight: '500' },
 
   monthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
   monthBtn: {
@@ -445,6 +456,11 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#00C896',
     alignItems: 'center',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 6,
   },
   btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
 });

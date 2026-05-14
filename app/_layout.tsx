@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Linking from 'expo-linking';
 import OnboardingFlow from '../components/OnboardingFlow';
 import AuthScreen from '../components/AuthScreen';
 import SetNewPassword from '../components/SetNewPassword';
@@ -15,10 +16,29 @@ import { getSetup, refreshSetup } from '../lib/setup';
 
 type Phase = 'loading' | 'signed-out' | 'recovery' | 'onboarding' | 'ready';
 
-// Pull a key=value out of "#a=1&b=2"
-function readHash(key: string, hash: string): string | null {
-  const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+// Pull a key=value out of "#a=1&b=2" or "?a=1&b=2"
+function readParam(key: string, raw: string): string | null {
+  const stripped = raw.startsWith('#') || raw.startsWith('?') ? raw.slice(1) : raw;
+  const params = new URLSearchParams(stripped);
   return params.get(key);
+}
+
+// Supabase puts recovery tokens in the URL fragment (#...) on web, and either
+// fragment or query on native depending on the redirect scheme. Try both.
+function extractRecovery(url: string): { access: string; refresh: string } | null {
+  const hashIdx = url.indexOf('#');
+  const queryIdx = url.indexOf('?');
+  const candidates = [
+    hashIdx >= 0 ? url.slice(hashIdx + 1) : '',
+    queryIdx >= 0 ? url.slice(queryIdx + 1, hashIdx >= 0 ? hashIdx : undefined) : '',
+  ].filter(Boolean);
+  for (const c of candidates) {
+    const type = readParam('type', c);
+    const access = readParam('access_token', c);
+    const refresh = readParam('refresh_token', c);
+    if (type === 'recovery' && access && refresh) return { access, refresh };
+  }
+  return null;
 }
 
 export default function RootLayout() {
@@ -48,23 +68,32 @@ export default function RootLayout() {
       setPhase(setup?.completed ? 'ready' : 'onboarding');
     };
 
-    // On web only, check the URL hash for a Supabase recovery token before
-    // anything else — if found, exchange it for a session and flag recovery.
-    const bootstrap = async () => {
+    // Exchange a recovery URL for a session. Used by both the web hash path
+    // and the native deep-link path. We strip the tokens out of the URL bar
+    // BEFORE calling setSession so no race window exists where another script
+    // (extension, analytics tag) could read them off `window.location`.
+    const consumeRecovery = async (rawUrl: string): Promise<boolean> => {
+      const tokens = extractRecovery(rawUrl);
+      if (!tokens) return false;
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        const hash = window.location.hash;
-        const type = readHash('type', hash);
-        const accessToken = readHash('access_token', hash);
-        const refreshToken = readHash('refresh_token', hash);
-        if (type === 'recovery' && accessToken && refreshToken) {
-          inRecovery = true;
-          await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          // Strip the tokens out of the address bar so reload doesn't loop.
-          window.history.replaceState({}, '', window.location.pathname + window.location.search);
-        }
+        window.history.replaceState({}, '', window.location.pathname + window.location.search);
+      }
+      inRecovery = true;
+      await supabase.auth.setSession({
+        access_token: tokens.access,
+        refresh_token: tokens.refresh,
+      });
+      return true;
+    };
+
+    const bootstrap = async () => {
+      // Web: tokens arrive in the address-bar hash on page load.
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        await consumeRecovery(window.location.href);
+      } else {
+        // Native: tokens arrive via the famescale:// deep link.
+        const initial = await Linking.getInitialURL();
+        if (initial) await consumeRecovery(initial);
       }
 
       const { data: { session } } = await supabase.auth.getSession();
@@ -72,6 +101,18 @@ export default function RootLayout() {
     };
 
     bootstrap();
+
+    // Native cold-start is handled by getInitialURL above; this listener
+    // covers the case where the app is already running and a deep link
+    // arrives. (No-op on web — RootLayout only mounts once per page load.)
+    const linkingSub =
+      Platform.OS !== 'web'
+        ? Linking.addEventListener('url', ({ url }) => {
+            consumeRecovery(url).then((didRecover) => {
+              if (didRecover) setPhase('recovery');
+            });
+          })
+        : null;
 
     const {
       data: { subscription },
@@ -85,6 +126,7 @@ export default function RootLayout() {
     return () => {
       cancelled = true;
       subscription.unsubscribe();
+      linkingSub?.remove();
     };
   }, []);
 

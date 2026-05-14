@@ -224,13 +224,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 32,
   },
   appName: {
-    fontSize: 64,
-    fontWeight: '700',
+    fontSize: 68,
+    fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: -2,
+    letterSpacing: -2.5,
     marginBottom: 12,
   },
-  tagline: { fontSize: 16, color: '#444', fontWeight: '400' },
+  tagline: { fontSize: 16, color: '#444', fontWeight: '500' },
 
   topBar: {
     flexDirection: 'row',
@@ -245,17 +245,19 @@ const s = StyleSheet.create({
 
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 40 },
   question: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    fontWeight: '800',
     color: '#FFFFFF',
-    lineHeight: 36,
+    lineHeight: 38,
     marginBottom: 12,
+    letterSpacing: -0.8,
   },
   questionSub: {
     fontSize: 14,
     color: '#444',
     lineHeight: 20,
     marginBottom: 24,
+    fontWeight: '500',
   },
 
   // Track-selection cards
@@ -275,7 +277,7 @@ const s = StyleSheet.create({
   choiceIcon: { width: 28, alignItems: 'center' },
   choiceTitle: { fontSize: 15, fontWeight: '600', color: '#888', marginBottom: 3 },
   choiceTextActive: { color: '#00C896' },
-  choiceDesc: { fontSize: 12, color: '#3A3A3A', lineHeight: 16 },
+  choiceDesc: { fontSize: 12, color: '#3A3A3A', lineHeight: 16, fontWeight: '500' },
 
   checkbox: {
     width: 22,
@@ -314,9 +316,9 @@ const s = StyleSheet.create({
     borderColor: '#222',
   },
   currencyRowActive: { borderColor: '#00C896', backgroundColor: '#0D1F1A' },
-  currencySymbol: { fontSize: 22, color: '#FFF', width: 32, textAlign: 'center' },
+  currencySymbol: { fontSize: 22, color: '#FFF', width: 32, textAlign: 'center', fontWeight: '600' },
   currencyCode: { fontSize: 15, fontWeight: '600', color: '#FFF', marginBottom: 2 },
-  currencyName: { fontSize: 12, color: '#555' },
+  currencyName: { fontSize: 12, color: '#555', fontWeight: '500' },
 
   footer: { paddingHorizontal: 24, paddingBottom: 32, gap: 12 },
   primaryBtn: {
@@ -324,6 +326,11 @@ const s = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 6,
   },
   primaryBtnText: { fontSize: 16, fontWeight: '700', color: '#000' },
 });

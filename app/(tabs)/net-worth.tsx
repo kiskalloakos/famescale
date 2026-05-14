@@ -102,7 +102,12 @@ export default function NetWorth() {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.heroCard}>
           <Text style={s.heroLabel}>NET WORTH</Text>
-          <Text style={[s.heroAmount, netWorth < 0 && { color: '#FF6B6B' }]}>
+          <Text
+            style={[
+              s.heroAmount,
+              netWorth < 0 && { color: '#FF6B6B', textShadowColor: 'rgba(255, 107, 107, 0.45)' },
+            ]}
+          >
             {fmt(netWorth, symbol)}
           </Text>
           <Text style={s.heroSub}>In your global currency · {currency}</Text>
@@ -200,8 +205,17 @@ const s = StyleSheet.create({
     borderColor: '#222',
   },
   heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5, marginBottom: 10 },
-  heroAmount: { fontSize: 38, fontWeight: '700', color: '#00C896', letterSpacing: -1 },
-  heroSub: { fontSize: 11, color: '#444', marginTop: 10 },
+  heroAmount: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#00C896',
+    letterSpacing: -1.2,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0, 200, 150, 0.45)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 16,
+  },
+  heroSub: { fontSize: 11, color: '#444', marginTop: 10, fontWeight: '500' },
 
   breakdownCard: {
     backgroundColor: '#151515',
@@ -228,9 +242,9 @@ const s = StyleSheet.create({
   },
   lineBordered: { borderTopWidth: 1, borderTopColor: '#1C1C1C' },
   lineLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  lineLabel: { fontSize: 14, color: '#CCC' },
-  linePos: { fontSize: 14, color: '#EEE', fontWeight: '500' },
-  lineNeg: { fontSize: 14, color: '#FF6B6B', fontWeight: '500' },
+  lineLabel: { fontSize: 14, color: '#CCC', fontWeight: '500' },
+  linePos: { fontSize: 14, color: '#EEE', fontWeight: '500', fontVariant: ['tabular-nums'] },
+  lineNeg: { fontSize: 14, color: '#FF6B6B', fontWeight: '500', fontVariant: ['tabular-nums'] },
   lineLabelMuted: { color: '#555', textDecorationLine: 'line-through' },
   lineMuted: { color: '#3A3A3A', textDecorationLine: 'line-through' },
   eyeBtn: { padding: 4, marginLeft: 4 },
@@ -246,7 +260,7 @@ const s = StyleSheet.create({
     backgroundColor: '#0F0F0F',
   },
   totalLabel: { fontSize: 11, fontWeight: '700', color: '#555', letterSpacing: 1.5 },
-  totalValue: { fontSize: 18, fontWeight: '700', color: '#00C896' },
+  totalValue: { fontSize: 18, fontWeight: '800', color: '#00C896', fontVariant: ['tabular-nums'] },
 
-  footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 4, lineHeight: 18 },
+  footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 4, lineHeight: 18, fontWeight: '500' },
 });
