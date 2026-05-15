@@ -34,11 +34,11 @@ const TABS: {
   visible: (s: SetupData) => boolean;
 }[] = [
   { name: 'index', title: 'Dashboard', visible: () => true },
+  // Core tab right after Dashboard — it owns cost management, can't be hidden.
+  { name: 'recurrings', title: 'Recurrings', visible: () => true },
   { name: 'investments', title: 'Investments', visible: (s) => s.showInvestments },
   { name: 'savings', title: 'Savings', visible: (s) => s.showSavings },
   { name: 'revenue', title: 'Revenue', visible: (s) => s.showRevenue },
-  // Core tab — it owns cost management, so it can't be hidden.
-  { name: 'recurrings', title: 'Recurrings', visible: () => true },
   { name: 'debts', title: 'Debts', visible: (s) => s.showDebts },
   { name: 'net-worth', title: 'Net Worth', visible: (s) => s.showNetWorth },
   { name: 'settings', title: 'Settings', visible: () => true },

@@ -27,14 +27,20 @@ no custom backend.
   session + password-recovery deep links, `SafeAreaProvider`,
   `GestureHandlerRootView`, and a forced dark navigation theme.
 - `app/(tabs)/_layout.tsx` — **material-top-tabs pager** (react-native-pager-view)
-  positioned at the bottom via `withLayoutContext`, with a custom icon-only
-  dark `tabBar`. Native finger-tracked swipe. `withLayoutContext`'s 3rd arg
-  is `true` so declared `<Screen>` children are the definitive route set;
-  visibility is `setup.showX` filtering of those children. The navigator is
-  `key`-ed on the visible set so a visibility toggle does a clean remount
-  (avoids react-native-tab-view pager-vs-state desync).
-- `app/(tabs)/*.tsx` — the 7 screens: `index` (Dashboard), `investments`,
-  `savings`, `revenue`, `debts`, `net-worth`, `settings`.
+  via `withLayoutContext`. **Native:** a fixed center pill with a label
+  strip translating under it, driven by the pager's live `position`
+  (finger-tracked). **Web:** a left-aligned scrollable pill bar (the
+  `WEB` branch in `_layout.tsx`). `withLayoutContext`'s 3rd arg is `true`
+  so declared `<Screen>` children are the definitive route set; optional
+  tabs are `setup.showX`-filtered. The navigator is `key`-ed on the
+  visible set so a visibility toggle does a clean remount (avoids
+  react-native-tab-view pager-vs-state desync).
+- `app/(tabs)/*.tsx` — 8 screens. **Core (always shown):** `index`
+  (Dashboard) and `recurrings` (Recurrings — sole owner of monthly-cost
+  management: add/edit/delete, mark-paid + account picker), then
+  `settings`. **Optional (`setup.showX`):** `investments`, `savings`,
+  `revenue`, `debts`, `net-worth`. Dashboard shows a read-only costs
+  summary that taps through to Recurrings.
 - `app/+html.tsx` — web HTML shell incl. CSP.
 - `app.json` — Expo config (`scheme: famescale`, `newArchEnabled: true`).
 
@@ -51,6 +57,11 @@ revenue, currency, setup, transactions) exposes the same shape:
   `monthsSinceStart`, `computeNetWorth`, `resetStaleCosts`); unit-tested
   (`finance.test.ts`, 26 cases). `userId()` lives in `supabase.ts`;
   `CURRENCIES` in `currencies.ts` — both deduped, don't re-inline.
+- Monthly cost auto-reset (un-pay last month's costs, no refund) runs
+  inside `dashboard.refreshDashboard` — screen-independent, so it happens
+  on any data load. Screens show the toast via `subscribeMonthlyReset`.
+  (`setup.showRecurrings` is now dead — Recurrings is unconditionally
+  core; flag/column kept only to avoid churn.)
 - `supabase.ts` — client; anon key from `EXPO_PUBLIC_*` env. **RLS is the only
   access control.** All 8 tables use `FOR ALL ... USING/WITH CHECK
   (auth.uid() = user_id)`. Audit SQL at repo root: `SECURITY_VERIFY.sql`
