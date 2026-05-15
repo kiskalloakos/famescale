@@ -9,6 +9,7 @@ export interface SetupData {
   showRevenue: boolean;
   showDebts: boolean;
   showNetWorth: boolean;
+  showRecurrings: boolean;
   includeDebtsInNetWorth: boolean;
 }
 
@@ -19,7 +20,7 @@ async function fromRemote(): Promise<SetupData | null> {
   if (!uid) return null;
   const { data, error } = await supabase
     .from('user_settings')
-    .select('investment_tab_name, show_investments, show_savings, show_revenue, show_debts, show_net_worth, net_worth_include_debts, setup_completed')
+    .select('investment_tab_name, show_investments, show_savings, show_revenue, show_debts, show_net_worth, show_recurrings, net_worth_include_debts, setup_completed')
     .eq('user_id', uid)
     .maybeSingle();
   if (error || !data) return null;
@@ -37,6 +38,7 @@ async function fromRemote(): Promise<SetupData | null> {
     showRevenue: data.show_revenue,
     showDebts: data.show_debts ?? false,
     showNetWorth: data.show_net_worth ?? false,
+    showRecurrings: data.show_recurrings ?? false,
     includeDebtsInNetWorth: data.net_worth_include_debts ?? true,
   };
 }
@@ -55,6 +57,7 @@ async function toRemote(d: SetupData): Promise<void> {
           show_revenue: d.showRevenue,
           show_debts: d.showDebts,
           show_net_worth: d.showNetWorth,
+          show_recurrings: d.showRecurrings,
           net_worth_include_debts: d.includeDebtsInNetWorth,
           setup_completed: d.completed,
         },

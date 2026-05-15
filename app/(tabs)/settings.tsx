@@ -85,7 +85,13 @@ export default function Settings() {
   };
 
   const toggleTab = async (
-    key: 'showInvestments' | 'showSavings' | 'showRevenue' | 'showDebts' | 'showNetWorth',
+    key:
+      | 'showInvestments'
+      | 'showSavings'
+      | 'showRevenue'
+      | 'showRecurrings'
+      | 'showDebts'
+      | 'showNetWorth',
   ) => {
     if (!setup) return;
     const next: SetupData = { ...setup, [key]: !setup[key] };
@@ -160,7 +166,13 @@ export default function Settings() {
             <View style={s.card}>
               {(() => {
                 const items: {
-                  key: 'showInvestments' | 'showSavings' | 'showRevenue' | 'showDebts' | 'showNetWorth';
+                  key:
+                    | 'showInvestments'
+                    | 'showSavings'
+                    | 'showRevenue'
+                    | 'showRecurrings'
+                    | 'showDebts'
+                    | 'showNetWorth';
                   icon: keyof typeof Ionicons.glyphMap;
                   title: string;
                   desc: string;
@@ -182,6 +194,12 @@ export default function Settings() {
                     icon: 'bar-chart-outline',
                     title: 'Revenue',
                     desc: 'Log yearly income, monthly breakdown, growth.',
+                  },
+                  {
+                    key: 'showRecurrings',
+                    icon: 'repeat-outline',
+                    title: 'Recurrings',
+                    desc: 'Monthly bills — what’s paid and what’s left.',
                   },
                   {
                     key: 'showDebts',
