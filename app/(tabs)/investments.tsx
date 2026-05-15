@@ -22,6 +22,7 @@ import {
   saveInvestments,
 } from '../../lib/investments';
 import { feedback } from '../../lib/feedback';
+import { fv, monthsSinceStart } from '../../lib/finance';
 import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 const CURRENCIES = [
@@ -34,18 +35,6 @@ const CURRENCIES = [
 ];
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function monthsSinceStart(year: number, month: number): number {
-  const now = new Date();
-  const diff = (now.getFullYear() - year) * 12 + (now.getMonth() + 1 - month) + 1;
-  return Math.max(1, diff);
-}
-
-function fv(pv: number, pmt: number, annualRate: number, months: number): number {
-  const r = annualRate / 100 / 12;
-  if (r === 0) return pv + pmt * months;
-  return pv * Math.pow(1 + r, months) + pmt * ((Math.pow(1 + r, months) - 1) / r);
-}
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
