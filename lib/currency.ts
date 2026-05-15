@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
@@ -16,11 +16,6 @@ const EMPTY: CurrencySettings = { global: DEFAULT_CURRENCY, overrides: {} };
 
 function columnFor(page: PageKey): string {
   return `${page}_currency`;
-}
-
-async function userId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
 }
 
 async function fromRemote(): Promise<CurrencySettings | null> {

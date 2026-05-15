@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
@@ -11,11 +11,6 @@ export interface Debt {
 }
 
 const NS = 'debts';
-
-async function userId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
-}
 
 export function peekDebts(): Debt[] {
   return peek<Debt[]>(NS, []);

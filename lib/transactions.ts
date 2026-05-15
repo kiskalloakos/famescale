@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, userId } from './supabase';
 import { reportable } from './sync';
 
 export type TxDirection = 'in' | 'out';
@@ -13,11 +13,6 @@ export interface Transaction {
   referenceId: string | null;
   note: string | null;
   createdAt: string; // ISO
-}
-
-async function userId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
 }
 
 export async function logTransaction(args: {

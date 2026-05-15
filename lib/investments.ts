@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
@@ -19,11 +19,6 @@ const DEFAULT: InvestmentData = {
   annualReturn: '7',
   showProjections: false,
 };
-
-async function userId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
-}
 
 export function peekInvestments(): InvestmentData {
   return peek<InvestmentData>(NS, DEFAULT);

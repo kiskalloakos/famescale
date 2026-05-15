@@ -24,6 +24,13 @@ export const supabase = createClient(url, anonKey, {
   },
 });
 
+// The signed-in user's id, or null. Single source of truth — every lib
+// module scopes its Supabase reads/writes by this.
+export async function userId(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
 // Where Supabase should redirect after sending a password-reset email.
 export function getRedirectUrl(): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {

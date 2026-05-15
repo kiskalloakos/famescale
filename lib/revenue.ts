@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { newId } from './dashboard';
 import { reportable } from './sync';
@@ -27,11 +27,6 @@ function normalize(state: RevenueState): RevenueState {
     entries.push({ id: newId(), label: String(new Date().getFullYear()), amount: 0 });
   }
   return { entries };
-}
-
-async function userId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
 }
 
 // Sync read of the cached revenue state, or null if load() hasn't run yet.

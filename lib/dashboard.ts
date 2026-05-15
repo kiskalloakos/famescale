@@ -1,5 +1,5 @@
 import * as Crypto from 'expo-crypto';
-import { supabase } from './supabase';
+import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
@@ -39,11 +39,6 @@ const EMPTY: DashboardData = { accounts: [], costs: [] };
 // SecureRandom on Android, window.crypto on web).
 export function newId(): string {
   return Crypto.randomUUID();
-}
-
-async function userId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
 }
 
 // ── Local cache ────────────────────────────────────────────

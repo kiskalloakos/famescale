@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
@@ -13,11 +13,6 @@ export interface SetupData {
 }
 
 const NS = 'setup';
-
-async function userId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
-}
 
 async function fromRemote(): Promise<SetupData | null> {
   const uid = await userId();
