@@ -13,7 +13,6 @@ import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup, subscribeSetup
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { computeNetWorth } from '../../lib/finance';
-import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 function fmt(value: number, symbol: string): string {
   const abs = Math.abs(value);
@@ -98,7 +97,6 @@ export default function NetWorth() {
   };
 
   return (
-    <SwipeBetweenTabs name="net-worth">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>NET WORTH</Text>
@@ -182,7 +180,6 @@ export default function NetWorth() {
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
-    </SwipeBetweenTabs>
   );
 }
 

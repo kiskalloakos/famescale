@@ -26,8 +26,13 @@ no custom backend.
 - `app/_layout.tsx` — root. Auth/onboarding/recovery phase machine, Supabase
   session + password-recovery deep links, `SafeAreaProvider`,
   `GestureHandlerRootView`, and a forced dark navigation theme.
-- `app/(tabs)/_layout.tsx` — bottom tab navigator (icon-only, dark). Tab
-  visibility is conditional via `href: setup.showX ? undefined : null`.
+- `app/(tabs)/_layout.tsx` — **material-top-tabs pager** (react-native-pager-view)
+  positioned at the bottom via `withLayoutContext`, with a custom icon-only
+  dark `tabBar`. Native finger-tracked swipe. `withLayoutContext`'s 3rd arg
+  is `true` so declared `<Screen>` children are the definitive route set;
+  visibility is `setup.showX` filtering of those children. The navigator is
+  `key`-ed on the visible set so a visibility toggle does a clean remount
+  (avoids react-native-tab-view pager-vs-state desync).
 - `app/(tabs)/*.tsx` — the 7 screens: `index` (Dashboard), `investments`,
   `savings`, `revenue`, `debts`, `net-worth`, `settings`.
 - `app/+html.tsx` — web HTML shell incl. CSP.
@@ -42,7 +47,10 @@ revenue, currency, setup, transactions) exposes the same shape:
 - `refreshX()` — authoritative read from Supabase, writes back to local.
 - `saveX()` — local + Supabase upsert (via `sync.ts` `reportable()` →
   `SyncIndicator`).
-- `finance.ts` — pure money math (`fv`, `monthsSinceStart`); unit-tested.
+- `finance.ts` — pure, dependency-free money/logic (`fv`,
+  `monthsSinceStart`, `computeNetWorth`, `resetStaleCosts`); unit-tested
+  (`finance.test.ts`, 26 cases). `userId()` lives in `supabase.ts`;
+  `CURRENCIES` in `currencies.ts` — both deduped, don't re-inline.
 - `supabase.ts` — client; anon key from `EXPO_PUBLIC_*` env. **RLS is the only
   access control.** All 8 tables use `FOR ALL ... USING/WITH CHECK
   (auth.uid() = user_id)`. Audit SQL at repo root: `SECURITY_VERIFY.sql`
@@ -50,8 +58,9 @@ revenue, currency, setup, transactions) exposes the same shape:
   `SECURITY_VERIFY.sql` in the Supabase SQL editor whenever a table is added.
 
 **Stack:** Expo ~54, React 19, React Native 0.81, TypeScript strict, New
-Architecture. expo-router 6, @react-navigation/bottom-tabs 7, Supabase,
-gesture-handler/reanimated, draggable-flatlist, safe-area-context.
+Architecture. expo-router 6, @react-navigation/material-top-tabs 7 +
+react-native-pager-view, Supabase, gesture-handler/reanimated,
+draggable-flatlist, safe-area-context.
 
 ## Conventions & gotchas
 
@@ -64,8 +73,13 @@ These are non-obvious and have bitten before — respect them:
 - **The dark navigation theme in `app/_layout.tsx` is load-bearing.**
   react-native-screens paints the native screen background from
   `theme.colors.background`; without it, tab transitions flash white.
-- **`SwipeBetweenTabs`** wraps every tab for horizontal swipe nav; the gesture
-  is enabled only on the focused screen (stacked handlers otherwise cascade).
+- **Tab swipe is native (pager), not a JS gesture.** The navigator is
+  `key`-ed on the visible-tab set: toggling a tab in Settings remounts it
+  (screens re-seed from `peekX()` instantly; scroll resets — acceptable for a
+  rare action). Don't try to "fix" the toggle with post-hoc `navigate()` —
+  react-native-tab-view desyncs the pager view from nav state on runtime
+  route-list changes; the remount is the working fix. `animationEnabled:false`
+  keeps taps instant; swipe still animates regardless.
 - **`@expo/cli` must match the Expo SDK major** (54.x — *not* 55). A mismatch
   ships a Metro whose HMR URL format Expo Go rejects, crashing the dev server.
 - **UUIDs come from `newId()`** (`lib/dashboard.ts`, expo-crypto). Never

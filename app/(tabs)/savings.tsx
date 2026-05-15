@@ -24,7 +24,6 @@ import {
 } from '../../lib/savings';
 import { feedback } from '../../lib/feedback';
 import { fv, monthsSinceStart } from '../../lib/finance';
-import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -116,7 +115,6 @@ export default function Savings() {
   };
 
   return (
-    <SwipeBetweenTabs name="savings">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>SAVINGS</Text>
@@ -301,7 +299,6 @@ export default function Savings() {
         </KeyboardAvoidingView>
       </Modal>
     </View>
-    </SwipeBetweenTabs>
   );
 }
 

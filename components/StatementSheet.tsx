@@ -160,7 +160,6 @@ export default function StatementSheet({
       <View style={s.overlay}>
         <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
         <View style={s.sheet}>
-          <View style={s.dragBar} />
           <View style={s.headerRow}>
             <View>
               <Text style={s.eyebrow}>STATEMENT</Text>
@@ -402,14 +401,6 @@ const s = StyleSheet.create({
     borderBottomWidth: 0,
     borderColor: '#2C2C2C',
     maxHeight: '92%',
-  },
-  dragBar: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#333',
-    alignSelf: 'center',
-    marginBottom: 12,
   },
   headerRow: {
     flexDirection: 'row',

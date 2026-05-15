@@ -23,7 +23,6 @@ import {
 import { supabase } from '../../lib/supabase';
 import { glowGreen } from '../../lib/glows';
 import { CURRENCIES } from '../../lib/currencies';
-import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
@@ -109,7 +108,6 @@ export default function Settings() {
   const selectedCurrency = CURRENCIES.find((c) => c.code === currency);
 
   return (
-    <SwipeBetweenTabs name="settings">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>SETTINGS</Text>
@@ -395,7 +393,6 @@ export default function Settings() {
       </Modal>
 
     </View>
-    </SwipeBetweenTabs>
   );
 }
 

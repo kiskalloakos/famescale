@@ -23,7 +23,6 @@ import { feedback } from '../../lib/feedback';
 import { useDragReorder } from '../../lib/useDragReorder';
 import DraggableRow from '../../components/DraggableRow';
 import SortableScroll from '../../components/SortableScroll';
-import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 import { NestableDraggableFlatList, RenderItemParams } from 'react-native-draggable-flatlist';
 
 function fmt(value: number, symbol: string): string {
@@ -165,7 +164,6 @@ export default function Debts() {
   };
 
   return (
-    <SwipeBetweenTabs name="debts">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>DEBTS</Text>
@@ -316,7 +314,6 @@ export default function Debts() {
         </KeyboardAvoidingView>
       </Modal>
     </View>
-    </SwipeBetweenTabs>
   );
 }
 
