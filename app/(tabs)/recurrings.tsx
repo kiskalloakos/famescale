@@ -10,6 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
@@ -21,14 +22,18 @@ import {
   refreshCurrencyForPage,
 } from '../../lib/currency';
 import {
+  Account,
   Cost,
   getDashboard,
   peekDashboard,
   refreshDashboard,
   saveCost as persistCost,
   deleteCost as removeCost,
+  saveAccount as persistAccount,
   newId,
+  currentMonthKey,
 } from '../../lib/dashboard';
+import { logTransaction } from '../../lib/transactions';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen, glowAmber } from '../../lib/glows';
@@ -51,16 +56,23 @@ function ordinal(n: number): string {
 export default function Recurrings() {
   const insets = useSafeAreaInsets();
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
+  const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       getDashboard().then((d) => {
-        if (!cancelled) setCosts(d.costs);
+        if (!cancelled) {
+          setCosts(d.costs);
+          setAccounts(d.accounts);
+        }
       });
       refreshDashboard().then((d) => {
-        if (!cancelled) setCosts(d.costs);
+        if (!cancelled) {
+          setCosts(d.costs);
+          setAccounts(d.accounts);
+        }
       });
       getCurrencyForPage('dashboard').then((c) => {
         if (!cancelled) setCurrency(c);
@@ -137,6 +149,79 @@ export default function Recurrings() {
     });
   };
 
+  // ── Pay / unpay ───────────────────────────────────────────────────────────
+  const [accountPicker, setAccountPicker] = useState<{ visible: boolean; cost: Cost | null }>({
+    visible: false,
+    cost: null,
+  });
+
+  const tapTickbox = (cost: Cost) => {
+    if (cost.paid) {
+      // Untick — refund to the account it was paid from (if it still exists).
+      const refundTo = cost.paidFromAccountId
+        ? accounts.find((a) => a.id === cost.paidFromAccountId)
+        : null;
+      if (refundTo) {
+        const updatedAccount: Account = {
+          ...refundTo,
+          amount: String(parseAmt(refundTo.amount) + parseAmt(cost.amount)),
+        };
+        setAccounts(accounts.map((a) => (a.id === updatedAccount.id ? updatedAccount : a)));
+        persistAccount(updatedAccount);
+        logTransaction({
+          accountId: refundTo.id,
+          amount: parseAmt(cost.amount),
+          direction: 'in',
+          kind: 'refund',
+          referenceId: cost.id,
+          note: cost.name,
+        });
+      }
+      const updated: Cost = { ...cost, paid: false, paidFromAccountId: null, paidMonth: null };
+      setCosts(costs.map((c) => (c.id === cost.id ? updated : c)));
+      persistCost(updated);
+      feedback.select();
+      return;
+    }
+    if (accounts.length === 0) {
+      Alert.alert('No accounts', 'Add a cash account first so you can pay this cost.');
+      return;
+    }
+    feedback.tap();
+    setAccountPicker({ visible: true, cost });
+  };
+
+  const payFromAccount = async (account: Account) => {
+    const cost = accountPicker.cost;
+    if (!cost) return;
+    const updatedAccount: Account = {
+      ...account,
+      amount: String(parseAmt(account.amount) - parseAmt(cost.amount)),
+    };
+    const updatedCost: Cost = {
+      ...cost,
+      paid: true,
+      paidFromAccountId: account.id,
+      paidMonth: currentMonthKey(),
+    };
+    setAccounts(accounts.map((a) => (a.id === account.id ? updatedAccount : a)));
+    setCosts(costs.map((c) => (c.id === cost.id ? updatedCost : c)));
+    setAccountPicker({ visible: false, cost: null });
+    feedback.success();
+    await Promise.all([
+      persistAccount(updatedAccount),
+      persistCost(updatedCost),
+      logTransaction({
+        accountId: account.id,
+        amount: parseAmt(cost.amount),
+        direction: 'out',
+        kind: 'cost',
+        referenceId: cost.id,
+        note: cost.name,
+      }),
+    ]);
+  };
+
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
   const total = costs.reduce((sum, c) => sum + parseAmt(c.amount), 0);
   const paid = costs.reduce((sum, c) => (c.paid ? sum + parseAmt(c.amount) : sum), 0);
@@ -191,7 +276,9 @@ export default function Recurrings() {
                 onPress={() => openEdit(c)}
                 style={[s.row, i > 0 && { borderTopWidth: 1, borderTopColor: '#1A1A1A' }]}
               >
-                <View
+                <Pressable
+                  onPress={() => tapTickbox(c)}
+                  hitSlop={8}
                   style={[s.statusDot, c.paid ? s.statusPaid : s.statusDue]}
                 >
                   <Ionicons
@@ -199,7 +286,7 @@ export default function Recurrings() {
                     size={13}
                     color={c.paid ? '#00C896' : '#FFA94D'}
                   />
-                </View>
+                </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text style={[s.rowName, c.paid && s.rowNamePaid]}>{c.name}</Text>
                   <Text style={s.rowDue}>Due {ordinal(c.dueDay ?? 1)}</Text>
@@ -282,6 +369,51 @@ export default function Recurrings() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={accountPicker.visible} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>What did you pay with?</Text>
+            {accountPicker.cost && (
+              <Text style={s.pickerSub}>
+                Paying {fmt(parseAmt(accountPicker.cost.amount), symbol)} for{' '}
+                <Text style={{ color: '#FFF', fontWeight: '600' }}>
+                  {accountPicker.cost.name}
+                </Text>
+              </Text>
+            )}
+            <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
+              {accounts.map((account, i) => {
+                const newBalance = accountPicker.cost
+                  ? parseAmt(account.amount) - parseAmt(accountPicker.cost.amount)
+                  : parseAmt(account.amount);
+                const goesNegative = newBalance < 0;
+                return (
+                  <TouchableOpacity
+                    key={account.id}
+                    style={[s.pickerRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#222' }]}
+                    onPress={() => payFromAccount(account)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.pickerName}>{account.name}</Text>
+                      <Text style={[s.pickerBalance, goesNegative && s.pickerNegative]}>
+                        {fmt(parseAmt(account.amount), symbol)} → {fmt(newBalance, symbol)}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="#444" />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity
+              style={s.btnCancel}
+              onPress={() => setAccountPicker({ visible: false, cost: null })}
+            >
+              <Text style={s.btnCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -444,4 +576,15 @@ const s = StyleSheet.create({
     marginTop: 8,
   },
   deleteLinkText: { fontSize: 13, color: '#FF6B6B', fontWeight: '500' },
+
+  pickerSub: { fontSize: 13, color: '#666', marginBottom: 18, lineHeight: 18, fontWeight: '500' },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  pickerName: { fontSize: 15, fontWeight: '600', color: '#FFF' },
+  pickerBalance: { fontSize: 12, color: '#555', marginTop: 3, fontWeight: '500', fontVariant: ['tabular-nums'] },
+  pickerNegative: { color: '#FFA94D' },
 });
