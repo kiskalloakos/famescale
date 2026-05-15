@@ -10,11 +10,11 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
-import { Debt, getDebts, refreshDebts, saveDebt, deleteDebt } from '../../lib/debts';
+import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { Debt, getDebts, peekDebts, refreshDebts, saveDebt, deleteDebt } from '../../lib/debts';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
 import { glowGreen, glowAmber } from '../../lib/glows';
@@ -43,8 +43,9 @@ function parseAmt(s: string): number {
 }
 
 export default function Debts() {
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [currency, setCurrency] = useState('RON');
+  const insets = useSafeAreaInsets();
+  const [debts, setDebts] = useState<Debt[]>(peekDebts);
+  const [currency, setCurrency] = useState(() => peekCurrencyForPage('debts'));
   const [editMode, setEditMode] = useState(false);
 
   const [modal, setModal] = useState<{ visible: boolean; editing: Debt | null }>({
@@ -171,7 +172,7 @@ export default function Debts() {
   };
 
   return (
-    <SafeAreaView style={s.container}>
+    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>DEBTS</Text>
         <TouchableOpacity
@@ -320,7 +321,7 @@ export default function Debts() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

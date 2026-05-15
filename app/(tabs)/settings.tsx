@@ -8,13 +8,14 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SetupData, getSetup, refreshSetup, saveSetup } from '../../lib/setup';
+import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup } from '../../lib/setup';
 import {
   PageKey,
   getCurrencySettings,
+  peekCurrencySettings,
   refreshCurrencySettings,
   saveGlobalCurrency,
   saveOverrideCurrency,
@@ -32,9 +33,12 @@ const CURRENCIES = [
 ];
 
 export default function Settings() {
-  const [currency, setCurrency] = useState('RON');
-  const [overrides, setOverrides] = useState<Partial<Record<PageKey, string>>>({});
-  const [setup, setSetup] = useState<SetupData | null>(null);
+  const insets = useSafeAreaInsets();
+  const [currency, setCurrency] = useState(() => peekCurrencySettings().global);
+  const [overrides, setOverrides] = useState<Partial<Record<PageKey, string>>>(
+    () => peekCurrencySettings().overrides,
+  );
+  const [setup, setSetup] = useState<SetupData | null>(peekSetup);
   const [email, setEmail] = useState<string | null>(null);
 
   const [currencyModal, setCurrencyModal] = useState(false);
@@ -112,7 +116,7 @@ export default function Settings() {
   const selectedCurrency = CURRENCIES.find((c) => c.code === currency);
 
   return (
-    <SafeAreaView style={s.container}>
+    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>SETTINGS</Text>
       </View>
@@ -396,7 +400,7 @@ export default function Settings() {
         </View>
       </Modal>
 
-    </SafeAreaView>
+    </View>
   );
 }
 

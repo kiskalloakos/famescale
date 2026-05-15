@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Linking from 'expo-linking';
 import OnboardingFlow from '../components/OnboardingFlow';
@@ -13,6 +13,12 @@ import SyncIndicator from '../components/SyncIndicator';
 import { supabase } from '../lib/supabase';
 import { setProfile } from '../lib/storage';
 import { getSetup, refreshSetup } from '../lib/setup';
+import { getDashboard } from '../lib/dashboard';
+import { getInvestments } from '../lib/investments';
+import { getSavings } from '../lib/savings';
+import { getDebts } from '../lib/debts';
+import { getRevenue } from '../lib/revenue';
+import { getCurrencySettings } from '../lib/currency';
 
 type Phase = 'loading' | 'signed-out' | 'recovery' | 'onboarding' | 'ready';
 
@@ -64,6 +70,19 @@ export default function RootLayout() {
       }
       let setup = await getSetup();
       if (!setup) setup = await refreshSetup();
+      if (cancelled) return;
+      // Warm the in-memory cache for every tab's data before mounting the
+      // tab navigator. Each screen's useState seeds from peekX(), so once
+      // these complete the first paint of every tab matches its eventual
+      // paint — no empty→loaded reflow on the first tab switch.
+      await Promise.all([
+        getDashboard(),
+        getInvestments(),
+        getSavings(),
+        getDebts(),
+        getRevenue(),
+        getCurrencySettings(),
+      ]);
       if (cancelled) return;
       setPhase(setup?.completed ? 'ready' : 'onboarding');
     };
@@ -136,7 +155,7 @@ export default function RootLayout() {
 
   if (phase === 'signed-out') {
     return (
-      <SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <StatusBar style="light" />
         <AuthScreen />
       </SafeAreaProvider>
@@ -145,7 +164,7 @@ export default function RootLayout() {
 
   if (phase === 'recovery') {
     return (
-      <SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <StatusBar style="light" />
         <SetNewPassword />
       </SafeAreaProvider>
@@ -154,7 +173,7 @@ export default function RootLayout() {
 
   if (phase === 'onboarding') {
     return (
-      <SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <StatusBar style="light" />
         <OnboardingFlow onComplete={() => setPhase('ready')} />
       </SafeAreaProvider>
@@ -163,7 +182,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <Stack screenOptions={{ headerShown: false }} />
         <SyncIndicator />
         <ToastHost />

@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import { supabase } from './supabase';
-import { load, save } from './storage';
+import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
 export interface Account {
@@ -47,6 +47,10 @@ async function userId(): Promise<string | null> {
 }
 
 // ── Local cache ────────────────────────────────────────────
+export function peekDashboard(): DashboardData {
+  return peek<DashboardData>(NS, EMPTY);
+}
+
 export async function getDashboard(): Promise<DashboardData> {
   return load<DashboardData>(NS, EMPTY);
 }

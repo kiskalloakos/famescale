@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SetupData, getSetup, refreshSetup, subscribeSetup } from '../../lib/setup';
+import { SetupData, getSetup, peekSetup, refreshSetup, subscribeSetup } from '../../lib/setup';
+
+const DEFAULT_SETUP: SetupData = {
+  completed: true,
+  showInvestments: true,
+  showSavings: false,
+  showRevenue: true,
+  showDebts: false,
+  showNetWorth: false,
+  includeDebtsInNetWorth: true,
+};
 
 export default function TabLayout() {
-  const [setup, setSetup] = useState<SetupData>({
-    completed: true,
-    showInvestments: true,
-    showSavings: false,
-    showRevenue: true,
-    showDebts: false,
-    showNetWorth: false,
-    includeDebtsInNetWorth: true,
-  });
+  const [setup, setSetup] = useState<SetupData>(() => peekSetup() ?? DEFAULT_SETUP);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,8 +35,12 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      detachInactiveScreens={false}
       screenOptions={{
         headerShown: false,
+        lazy: false,
+        animation: 'none',
+        freezeOnBlur: false,
         tabBarStyle: {
           backgroundColor: '#0D0D0D',
           borderTopColor: '#1C1C1C',

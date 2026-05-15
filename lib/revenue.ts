@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { load, save } from './storage';
+import { load, peek, save } from './storage';
 import { newId } from './dashboard';
 import { reportable } from './sync';
 
@@ -32,6 +32,13 @@ function normalize(state: RevenueState): RevenueState {
 async function userId(): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
   return user?.id ?? null;
+}
+
+// Sync read of the cached revenue state, or null if load() hasn't run yet.
+// Screens use this to seed initial state and skip the empty→loaded reflow.
+export function peekRevenue(): RevenueState | null {
+  const state = peek<RevenueState | null>(NS, null);
+  return state ? normalize(state) : null;
 }
 
 export async function getRevenue(): Promise<RevenueState> {

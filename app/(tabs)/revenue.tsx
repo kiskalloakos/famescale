@@ -11,14 +11,15 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import {
   RevenueState,
   RevenueEntry,
   getRevenue,
+  peekRevenue,
   refreshRevenue,
   saveRevenue,
   sortEntries,
@@ -49,8 +50,9 @@ function fmt(value: number, symbol: string): string {
 }
 
 export default function Revenue() {
-  const [state, setState] = useState<RevenueState | null>(null);
-  const [currency, setCurrency] = useState('RON');
+  const insets = useSafeAreaInsets();
+  const [state, setState] = useState<RevenueState | null>(peekRevenue);
+  const [currency, setCurrency] = useState(() => peekCurrencyForPage('revenue'));
   const [editVisible, setEditVisible] = useState(false);
   const [monthInputs, setMonthInputs] = useState<string[]>(Array(12).fill(''));
 
@@ -85,7 +87,7 @@ export default function Revenue() {
   );
 
   if (!state) {
-    return <SafeAreaView style={s.container} />;
+    return <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]} />;
   }
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
@@ -259,7 +261,7 @@ export default function Revenue() {
   };
 
   return (
-    <SafeAreaView style={s.container}>
+    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>REVENUE</Text>
       </View>
@@ -506,7 +508,7 @@ export default function Revenue() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

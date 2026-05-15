@@ -11,14 +11,15 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import {
   Account,
   Cost,
   getDashboard,
+  peekDashboard,
   refreshDashboard,
   saveAccount as persistAccount,
   deleteAccount as removeAccount,
@@ -90,9 +91,10 @@ function ordinal(n: number): string {
 }
 
 export default function Dashboard() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [costs, setCosts] = useState<Cost[]>([]);
-  const [currency, setCurrency] = useState('RON');
+  const insets = useSafeAreaInsets();
+  const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
+  const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
+  const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
   const [costsExpanded, setCostsExpanded] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
@@ -495,7 +497,7 @@ export default function Dashboard() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={s.container}>
+    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>DASHBOARD</Text>
         <View style={s.headerActions}>
@@ -1117,7 +1119,7 @@ export default function Dashboard() {
           onClose={() => setStatement((sx) => ({ ...sx, visible: false }))}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -10,13 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import {
   InvestmentData,
   getInvestments,
+  peekInvestments,
   refreshInvestments,
   saveInvestments,
 } from '../../lib/investments';
@@ -54,14 +55,9 @@ function fmtFull(value: number, symbol: string): string {
 }
 
 export default function Investments() {
-  const [data, setData] = useState<InvestmentData>({
-    totalInvested: '',
-    startMonth: String(new Date().getMonth() + 1),
-    startYear: String(new Date().getFullYear()),
-    annualReturn: '7',
-    showProjections: false,
-  });
-  const [currency, setCurrency] = useState('RON');
+  const insets = useSafeAreaInsets();
+  const [data, setData] = useState<InvestmentData>(peekInvestments);
+  const [currency, setCurrency] = useState(() => peekCurrencyForPage('investments'));
   const [yearlyExpanded, setYearlyExpanded] = useState(true);
 
   // Tap-to-edit modal for the whole portfolio (total + start date + rate)
@@ -139,7 +135,7 @@ export default function Investments() {
   };
 
   return (
-    <SafeAreaView style={s.container}>
+    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>INVESTMENTS</Text>
       </View>
@@ -326,7 +322,7 @@ export default function Investments() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

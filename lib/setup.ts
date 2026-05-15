@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { load, save } from './storage';
+import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
 export interface SetupData {
@@ -66,6 +66,10 @@ async function toRemote(d: SetupData): Promise<void> {
         { onConflict: 'user_id' },
       ),
   );
+}
+
+export function peekSetup(): SetupData | null {
+  return peek<SetupData | null>(NS, null);
 }
 
 export async function getSetup(): Promise<SetupData | null> {

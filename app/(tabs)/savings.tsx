@@ -10,13 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import {
   SavingsData,
   getSavings,
+  peekSavings,
   refreshSavings,
   saveSavings,
 } from '../../lib/savings';
@@ -54,14 +55,9 @@ function fmtFull(value: number, symbol: string): string {
 }
 
 export default function Savings() {
-  const [data, setData] = useState<SavingsData>({
-    totalInvested: '',
-    startMonth: String(new Date().getMonth() + 1),
-    startYear: String(new Date().getFullYear()),
-    annualReturn: '5',
-    showProjections: false,
-  });
-  const [currency, setCurrency] = useState('RON');
+  const insets = useSafeAreaInsets();
+  const [data, setData] = useState<SavingsData>(peekSavings);
+  const [currency, setCurrency] = useState(() => peekCurrencyForPage('savings'));
   const [yearlyExpanded, setYearlyExpanded] = useState(true);
 
   const [editVisible, setEditVisible] = useState(false);
@@ -138,7 +134,7 @@ export default function Savings() {
   };
 
   return (
-    <SafeAreaView style={s.container}>
+    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>SAVINGS</Text>
       </View>
@@ -321,7 +317,7 @@ export default function Savings() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

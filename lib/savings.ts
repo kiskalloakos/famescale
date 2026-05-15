@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { load, save } from './storage';
+import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
 export interface SavingsData {
@@ -23,6 +23,10 @@ const DEFAULT: SavingsData = {
 async function userId(): Promise<string | null> {
   const { data: { user } } = await supabase.auth.getUser();
   return user?.id ?? null;
+}
+
+export function peekSavings(): SavingsData {
+  return peek<SavingsData>(NS, DEFAULT);
 }
 
 export async function getSavings(): Promise<SavingsData> {

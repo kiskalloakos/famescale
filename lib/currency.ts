@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { load, save } from './storage';
+import { load, peek, save } from './storage';
 import { reportable } from './sync';
 
 const NS = 'currency';
@@ -43,6 +43,18 @@ async function fromRemote(): Promise<CurrencySettings | null> {
 
 // ── Public API ──────────────────────────────────────────────────────────────
 // For Settings (full structure)
+export function peekCurrencySettings(): CurrencySettings {
+  // Backward-compat: older cache stored a plain string.
+  const cached = peek<CurrencySettings | string>(NS, EMPTY);
+  if (typeof cached === 'string') return { global: cached, overrides: {} };
+  return cached;
+}
+
+export function peekCurrencyForPage(page: PageKey): string {
+  const s = peekCurrencySettings();
+  return s.overrides[page] ?? s.global;
+}
+
 export async function getCurrencySettings(): Promise<CurrencySettings> {
   // Backward-compat: older cache stored a plain string.
   const cached = await load<CurrencySettings | string>(NS, EMPTY);

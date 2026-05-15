@@ -1,14 +1,14 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrency, refreshCurrency } from '../../lib/currency';
-import { getDashboard, refreshDashboard } from '../../lib/dashboard';
-import { getInvestments, refreshInvestments } from '../../lib/investments';
-import { getSavings, refreshSavings } from '../../lib/savings';
-import { getDebts, refreshDebts } from '../../lib/debts';
-import { SetupData, getSetup, refreshSetup, saveSetup, subscribeSetup } from '../../lib/setup';
+import { getCurrency, peekCurrencySettings, refreshCurrency } from '../../lib/currency';
+import { getDashboard, peekDashboard, refreshDashboard } from '../../lib/dashboard';
+import { getInvestments, peekInvestments, refreshInvestments } from '../../lib/investments';
+import { getSavings, peekSavings, refreshSavings } from '../../lib/savings';
+import { getDebts, peekDebts, refreshDebts } from '../../lib/debts';
+import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup, subscribeSetup } from '../../lib/setup';
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 
@@ -33,12 +33,17 @@ function parseAmt(s: string): number {
 }
 
 export default function NetWorth() {
-  const [cash, setCash] = useState(0);
-  const [invested, setInvested] = useState(0);
-  const [saved, setSaved] = useState(0);
-  const [debts, setDebts] = useState(0);
-  const [currency, setCurrency] = useState('RON');
-  const [setup, setSetup] = useState<SetupData | null>(null);
+  const insets = useSafeAreaInsets();
+  const [cash, setCash] = useState(() =>
+    peekDashboard().accounts.reduce((s, a) => s + parseAmt(a.amount), 0),
+  );
+  const [invested, setInvested] = useState(() => parseAmt(peekInvestments().totalInvested));
+  const [saved, setSaved] = useState(() => parseAmt(peekSavings().totalInvested));
+  const [debts, setDebts] = useState(() =>
+    peekDebts().reduce((s, d) => s + parseAmt(d.amount), 0),
+  );
+  const [currency, setCurrency] = useState(() => peekCurrencySettings().global);
+  const [setup, setSetup] = useState<SetupData | null>(peekSetup);
 
   useFocusEffect(
     useCallback(() => {
@@ -97,7 +102,7 @@ export default function NetWorth() {
   };
 
   return (
-    <SafeAreaView style={s.container}>
+    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>NET WORTH</Text>
       </View>
@@ -179,7 +184,7 @@ export default function NetWorth() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
