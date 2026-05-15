@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { supabase, userId } from './supabase';
 import { load, peek, save } from './storage';
 import { reportable } from './sync';
+import { resetStaleCosts } from './finance';
 
 export interface Account {
   id: string;
@@ -92,8 +93,52 @@ export async function refreshDashboard(): Promise<DashboardData> {
       paidMonth: r.paid_month,
     })),
   };
-  await persistCache(data);
-  return data;
+
+  // Monthly auto-reset lives here (not in a screen) so it happens on any
+  // data load — Dashboard's "after payments" stays correct even if the
+  // user never opens the costs/recurrings UI. Past payments stay deducted
+  // (no refund); the cost is just un-paid for the new month.
+  const month = currentMonthKey();
+  const { next, reset } = resetStaleCosts(data.costs, month);
+  if (reset.length > 0) {
+    for (const c of reset) {
+      await reportable(
+        supabase.from('costs').upsert({
+          id: c.id,
+          user_id: uid,
+          name: c.name,
+          amount: parseFloat(c.amount) || 0,
+          paid: c.paid,
+          position: c.position,
+          due_day: c.dueDay,
+          paid_from_account_id: c.paidFromAccountId ?? null,
+          paid_month: c.paidMonth ?? null,
+        }),
+      );
+    }
+  }
+  const cleaned: DashboardData = { accounts: data.accounts, costs: next };
+  await persistCache(cleaned);
+  if (reset.length > 0) {
+    resetListeners.forEach((fn) => fn({ count: reset.length, month }));
+  }
+  return cleaned;
+}
+
+// Fired once when refreshDashboard auto-un-pays last month's costs, so a
+// screen can surface a toast without the data layer knowing about UI.
+export interface MonthlyResetInfo {
+  count: number;
+  month: string;
+}
+const resetListeners = new Set<(i: MonthlyResetInfo) => void>();
+export function subscribeMonthlyReset(
+  fn: (i: MonthlyResetInfo) => void,
+): () => void {
+  resetListeners.add(fn);
+  return () => {
+    resetListeners.delete(fn);
+  };
 }
 
 // ── Account ops ─────────────────────────────────────────────

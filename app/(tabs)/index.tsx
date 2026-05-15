@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,6 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import { CURRENCIES } from '../../lib/currencies';
-import { resetStaleCosts } from '../../lib/finance';
 import {
   Account,
   Cost,
@@ -29,6 +28,7 @@ import {
   deleteCost as removeCost,
   newId,
   currentMonthKey,
+  subscribeMonthlyReset,
 } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
 import { glowGreen, glowAmber, glowGreenHero } from '../../lib/glows';
@@ -131,22 +131,26 @@ export default function Dashboard() {
     setTransactions(list);
   }, []);
 
-  // ── Auto-reset paid costs that were paid in a previous month ──────────────
-  const applyDashboard = useCallback(async (d: ReturnType<typeof getDashboard> extends Promise<infer T> ? T : never) => {
-    const month = currentMonthKey();
-    const { next, reset } = resetStaleCosts(d.costs, month);
-    setAccounts(d.accounts);
-    setCosts(next);
-    if (reset.length > 0) {
-      // Persist resets to Supabase (no refund — payment already happened)
-      for (const c of reset) {
-        await persistCost(c);
-      }
-      showToast(
-        `Reset ${reset.length} ${reset.length === 1 ? 'cost' : 'costs'} for ${monthName(month)} — last month's payments stayed deducted.`,
-      );
-    }
-  }, []);
+  // The monthly auto-reset now lives in lib/dashboard (runs on any data
+  // load, screen-independent). Here we just reflect whatever it returns and
+  // surface the one-time toast when it un-pays last month's costs.
+  const applyDashboard = useCallback(
+    (d: ReturnType<typeof getDashboard> extends Promise<infer T> ? T : never) => {
+      setAccounts(d.accounts);
+      setCosts(d.costs);
+    },
+    [],
+  );
+
+  useEffect(
+    () =>
+      subscribeMonthlyReset(({ count, month }) =>
+        showToast(
+          `Reset ${count} ${count === 1 ? 'cost' : 'costs'} for ${monthName(month)} — last month's payments stayed deducted.`,
+        ),
+      ),
+    [],
+  );
 
   useFocusEffect(
     useCallback(() => {
