@@ -16,6 +16,7 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import { CURRENCIES } from '../../lib/currencies';
+import { resetStaleCosts } from '../../lib/finance';
 import {
   Account,
   Cost,
@@ -134,15 +135,7 @@ export default function Dashboard() {
   // ── Auto-reset paid costs that were paid in a previous month ──────────────
   const applyDashboard = useCallback(async (d: ReturnType<typeof getDashboard> extends Promise<infer T> ? T : never) => {
     const month = currentMonthKey();
-    const reset: Cost[] = [];
-    const next: Cost[] = d.costs.map((c) => {
-      if (c.paid && c.paidMonth && c.paidMonth !== month) {
-        const cleared: Cost = { ...c, paid: false, paidFromAccountId: null, paidMonth: null };
-        reset.push(cleared);
-        return cleared;
-      }
-      return c;
-    });
+    const { next, reset } = resetStaleCosts(d.costs, month);
     setAccounts(d.accounts);
     setCosts(next);
     if (reset.length > 0) {

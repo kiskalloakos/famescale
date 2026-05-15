@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { fv, monthsSinceStart } from './finance';
+import { fv, monthsSinceStart, computeNetWorth, resetStaleCosts } from './finance';
 
 describe('fv — future value of lump sum + monthly contributions', () => {
   it('zero rate, no contributions: value is unchanged', () => {
@@ -65,5 +65,113 @@ describe('monthsSinceStart — elapsed months, clamped to >= 1', () => {
     // step back one calendar month, handling the January wrap
     const d = new Date(y, now.getMonth() - 1, 1);
     expect(monthsSinceStart(d.getFullYear(), d.getMonth() + 1)).toBe(2);
+  });
+});
+
+describe('computeNetWorth — roll-up with load-bearing boolean defaults', () => {
+  it('null setup: cash + investments − debts, savings excluded by default', () => {
+    const r = computeNetWorth(1000, 500, 999, 200, null);
+    expect(r.investmentsEnabled).toBe(true);
+    expect(r.savingsEnabled).toBe(false); // showSavings defaults OFF
+    expect(r.debtsEnabled).toBe(true);
+    expect(r.debtsCountInTotal).toBe(true);
+    expect(r.investedTotal).toBe(500); // saved (999) NOT counted
+    expect(r.netWorth).toBe(1000 + 500 - 200);
+  });
+
+  it('savings counted only when showSavings === true', () => {
+    expect(computeNetWorth(0, 0, 300, 0, { showSavings: true }).investedTotal).toBe(300);
+    expect(computeNetWorth(0, 0, 300, 0, { showSavings: false }).investedTotal).toBe(0);
+    expect(computeNetWorth(0, 0, 300, 0, {}).investedTotal).toBe(0); // undefined => off
+  });
+
+  it('investments excluded only when showInvestments === false', () => {
+    expect(computeNetWorth(0, 400, 0, 0, { showInvestments: false }).investedTotal).toBe(0);
+    expect(computeNetWorth(0, 400, 0, 0, { showInvestments: undefined }).investedTotal).toBe(400);
+  });
+
+  it('debts dropped from total when the tab is off', () => {
+    const r = computeNetWorth(1000, 0, 0, 250, { showDebts: false });
+    expect(r.debtsEnabled).toBe(false);
+    expect(r.debtsCountInTotal).toBe(false);
+    expect(r.netWorth).toBe(1000); // debts not subtracted
+  });
+
+  it('debts shown but excluded from total via includeDebtsInNetWorth=false', () => {
+    const r = computeNetWorth(1000, 0, 0, 250, { includeDebtsInNetWorth: false });
+    expect(r.debtsEnabled).toBe(true); // still rendered
+    expect(r.debtsCountInTotal).toBe(false); // but not subtracted
+    expect(r.netWorth).toBe(1000);
+  });
+
+  it('everything on: cash + investments + savings − debts', () => {
+    const r = computeNetWorth(1000, 500, 300, 200, {
+      showInvestments: true,
+      showSavings: true,
+      showDebts: true,
+      includeDebtsInNetWorth: true,
+    });
+    expect(r.netWorth).toBe(1000 + 500 + 300 - 200);
+  });
+
+  it('net worth can go negative', () => {
+    expect(computeNetWorth(100, 0, 0, 900, null).netWorth).toBe(-800);
+  });
+});
+
+describe('resetStaleCosts — monthly un-pay of last month’s costs', () => {
+  const mk = (over: Partial<{ id: string; paid: boolean; paidMonth: string | null; paidFromAccountId: string | null; name: string }>) => ({
+    id: 'x', name: 'rent', amount: '100', paid: false, paidMonth: null as string | null,
+    paidFromAccountId: null as string | null, ...over,
+  });
+
+  it('a cost paid in a previous month is cleared and reported', () => {
+    const { next, reset } = resetStaleCosts([mk({ paid: true, paidMonth: '2026-04', paidFromAccountId: 'acc1' })], '2026-05');
+    expect(reset).toHaveLength(1);
+    expect(next[0].paid).toBe(false);
+    expect(next[0].paidMonth).toBeNull();
+    expect(next[0].paidFromAccountId).toBeNull();
+  });
+
+  it('a cost paid in the current month is left untouched', () => {
+    const c = mk({ paid: true, paidMonth: '2026-05', paidFromAccountId: 'acc1' });
+    const { next, reset } = resetStaleCosts([c], '2026-05');
+    expect(reset).toHaveLength(0);
+    expect(next[0]).toBe(c); // same reference, unchanged
+  });
+
+  it('an unpaid cost is never touched', () => {
+    const c = mk({ paid: false, paidMonth: null });
+    const { next, reset } = resetStaleCosts([c], '2026-05');
+    expect(reset).toHaveLength(0);
+    expect(next[0]).toBe(c);
+  });
+
+  it('a paid cost with no paidMonth (legacy) is left alone', () => {
+    const c = mk({ paid: true, paidMonth: null });
+    const { reset } = resetStaleCosts([c], '2026-05');
+    expect(reset).toHaveLength(0);
+  });
+
+  it('preserves unrelated fields on reset rows', () => {
+    const { next } = resetStaleCosts([mk({ id: 'rent7', name: 'Rent', paid: true, paidMonth: '2026-03' })], '2026-05');
+    expect(next[0].id).toBe('rent7');
+    expect(next[0].name).toBe('Rent');
+    expect(next[0].amount).toBe('100');
+  });
+
+  it('mixed list: only stale rows reset, order preserved', () => {
+    const a = mk({ id: 'a', paid: true, paidMonth: '2026-04' }); // stale
+    const b = mk({ id: 'b', paid: true, paidMonth: '2026-05' }); // current
+    const c = mk({ id: 'c', paid: false });                       // unpaid
+    const { next, reset } = resetStaleCosts([a, b, c], '2026-05');
+    expect(reset.map((r) => r.id)).toEqual(['a']);
+    expect(next.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+    expect(next[1]).toBe(b);
+    expect(next[2]).toBe(c);
+  });
+
+  it('empty list yields empty result', () => {
+    expect(resetStaleCosts([], '2026-05')).toEqual({ next: [], reset: [] });
   });
 });

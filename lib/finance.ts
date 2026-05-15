@@ -19,3 +19,64 @@ export function fv(pv: number, pmt: number, annualRate: number, months: number):
   if (r === 0) return pv + pmt * months;
   return pv * Math.pow(1 + r, months) + pmt * ((Math.pow(1 + r, months) - 1) / r);
 }
+
+// Net-worth roll-up. The boolean defaults are deliberate and load-bearing:
+// investments/debts default ON when the flag is undefined (`!== false`),
+// savings defaults OFF (`=== true`). A null setup (not yet loaded) therefore
+// counts cash + investments − debts. Returns the full breakdown so the screen
+// has a single source of truth for both the number and row visibility.
+export interface NetWorthSetup {
+  showInvestments?: boolean;
+  showSavings?: boolean;
+  showDebts?: boolean;
+  includeDebtsInNetWorth?: boolean;
+}
+export interface NetWorthBreakdown {
+  investmentsEnabled: boolean;
+  savingsEnabled: boolean;
+  debtsEnabled: boolean;
+  debtsCountInTotal: boolean;
+  investedTotal: number;
+  netWorth: number;
+}
+export function computeNetWorth(
+  cash: number,
+  invested: number,
+  saved: number,
+  debts: number,
+  setup: NetWorthSetup | null,
+): NetWorthBreakdown {
+  const investmentsEnabled = setup?.showInvestments !== false;
+  const savingsEnabled = setup?.showSavings === true;
+  const debtsEnabled = setup?.showDebts !== false;
+  const debtsCountInTotal = debtsEnabled && setup?.includeDebtsInNetWorth !== false;
+  const investedTotal = (investmentsEnabled ? invested : 0) + (savingsEnabled ? saved : 0);
+  const netWorth = cash + investedTotal - (debtsCountInTotal ? debts : 0);
+  return { investmentsEnabled, savingsEnabled, debtsEnabled, debtsCountInTotal, investedTotal, netWorth };
+}
+
+// Monthly cost auto-reset. A cost that was marked paid in a *previous* month
+// is un-paid for the new month (the past payment stays deducted — no refund).
+// Pure: returns the rebuilt list plus the subset that changed, so the caller
+// owns the side effects (persist + toast). Generic so the caller keeps its
+// full Cost type; only the fields this clears are constrained.
+export interface ResettableCost {
+  paid: boolean;
+  paidFromAccountId?: string | null;
+  paidMonth?: string | null;
+}
+export function resetStaleCosts<T extends ResettableCost>(
+  costs: T[],
+  currentMonth: string,
+): { next: T[]; reset: T[] } {
+  const reset: T[] = [];
+  const next = costs.map((c) => {
+    if (c.paid && c.paidMonth && c.paidMonth !== currentMonth) {
+      const cleared = { ...c, paid: false, paidFromAccountId: null, paidMonth: null };
+      reset.push(cleared);
+      return cleared;
+    }
+    return c;
+  });
+  return { next, reset };
+}

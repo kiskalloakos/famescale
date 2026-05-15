@@ -12,6 +12,7 @@ import { getDebts, peekDebts, refreshDebts } from '../../lib/debts';
 import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup, subscribeSetup } from '../../lib/setup';
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
+import { computeNetWorth } from '../../lib/finance';
 import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 function fmt(value: number, symbol: string): string {
@@ -79,12 +80,14 @@ export default function NetWorth() {
   );
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
-  const investmentsEnabled = setup?.showInvestments !== false;
-  const savingsEnabled = setup?.showSavings === true;
-  const debtsEnabled = setup?.showDebts !== false;
-  const debtsCountInTotal = debtsEnabled && setup?.includeDebtsInNetWorth !== false;
-  const investedTotal = (investmentsEnabled ? invested : 0) + (savingsEnabled ? saved : 0);
-  const netWorth = cash + investedTotal - (debtsCountInTotal ? debts : 0);
+  const {
+    investmentsEnabled,
+    savingsEnabled,
+    debtsEnabled,
+    debtsCountInTotal,
+    investedTotal,
+    netWorth,
+  } = computeNetWorth(cash, invested, saved, debts, setup);
 
   const toggleDebtsInNetWorth = async () => {
     if (!setup) return;
