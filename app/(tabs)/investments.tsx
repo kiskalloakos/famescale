@@ -136,8 +136,8 @@ export default function Investments() {
 
   return (
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={s.header}>
-        <Text style={s.headerTitle}>INVESTMENTS</Text>
+        <View style={s.header}>
+          <Text style={s.headerTitle}>INVESTMENTS</Text>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>

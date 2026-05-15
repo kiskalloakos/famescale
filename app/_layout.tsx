@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
-import { View, Platform } from 'react-native';
+import { LogBox, View, Platform } from 'react-native';
 import { Stack } from 'expo-router';
+
+// react-native-draggable-flatlist@4.0.3 calls measureLayout against a ref the
+// New Architecture (newArchEnabled) no longer treats as a native node. Drag
+// still works; the warning is cosmetic. Silence just this one string so real
+// warnings stay visible. Revisit if the drag library is upgraded.
+LogBox.ignoreLogs(['ref.measureLayout must be called with a ref to a native component']);
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
