@@ -1,5 +1,16 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +25,12 @@ import {
   getDashboard,
   peekDashboard,
   refreshDashboard,
+  saveCost as persistCost,
+  deleteCost as removeCost,
+  newId,
 } from '../../lib/dashboard';
+import { showToast } from '../../lib/toast';
+import { feedback } from '../../lib/feedback';
 import { glowGreen, glowAmber } from '../../lib/glows';
 
 function fmt(value: number, symbol: string): string {
@@ -58,6 +74,69 @@ export default function Recurrings() {
     }, []),
   );
 
+  // ── Add / edit / delete ───────────────────────────────────────────────────
+  const [costModal, setCostModal] = useState<{ visible: boolean; editing: Cost | null }>({
+    visible: false,
+    editing: null,
+  });
+  const [formName, setFormName] = useState('');
+  const [formAmount, setFormAmount] = useState('');
+  const [formDueDay, setFormDueDay] = useState('1');
+
+  const openAdd = () => {
+    setFormName('');
+    setFormAmount('');
+    setFormDueDay(String(new Date().getDate()));
+    feedback.tap();
+    setCostModal({ visible: true, editing: null });
+  };
+
+  const openEdit = (cost: Cost) => {
+    setFormName(cost.name);
+    setFormAmount(cost.amount);
+    setFormDueDay(String(cost.dueDay ?? 1));
+    feedback.tap();
+    setCostModal({ visible: true, editing: cost });
+  };
+
+  const saveForm = async () => {
+    if (!formName.trim()) return;
+    const editing = costModal.editing;
+    const dueDay = Math.min(31, Math.max(1, parseInt(formDueDay) || 1));
+    const cost: Cost = editing
+      ? { ...editing, name: formName.trim(), amount: formAmount, dueDay }
+      : {
+          id: newId(),
+          name: formName.trim(),
+          amount: formAmount,
+          paid: false,
+          position: costs.length,
+          dueDay,
+          paidFromAccountId: null,
+          paidMonth: null,
+        };
+    setCosts(
+      editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost],
+    );
+    setCostModal({ visible: false, editing: null });
+    feedback.success();
+    await persistCost(cost);
+  };
+
+  const removeForm = async (cost: Cost) => {
+    setCostModal({ visible: false, editing: null });
+    setCosts((prev) => prev.filter((c) => c.id !== cost.id));
+    feedback.destroy();
+    await removeCost(cost.id);
+    showToast(`Deleted ${cost.name}`, {
+      label: 'Undo',
+      onPress: async () => {
+        setCosts((prev) => [...prev, cost]);
+        await persistCost(cost);
+      },
+    });
+  };
+
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
   const total = costs.reduce((sum, c) => sum + parseAmt(c.amount), 0);
   const paid = costs.reduce((sum, c) => (c.paid ? sum + parseAmt(c.amount) : sum), 0);
@@ -94,20 +173,22 @@ export default function Recurrings() {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <Text style={s.cardTitle}>This month</Text>
+            <TouchableOpacity style={s.addBtn} onPress={openAdd}>
+              <Ionicons name="add" size={20} color="#00C896" style={glowGreen} />
+            </TouchableOpacity>
           </View>
 
           {sorted.length === 0 ? (
-            <View style={s.empty}>
+            <TouchableOpacity style={s.empty} onPress={openAdd}>
               <Ionicons name="repeat-outline" size={26} color="#333" />
               <Text style={s.emptyText}>No recurring costs yet</Text>
-              <Text style={s.emptyHint}>
-                Add monthly costs on the Dashboard — they’ll show up here.
-              </Text>
-            </View>
+              <Text style={s.emptyHint}>Tap to add your first recurring cost.</Text>
+            </TouchableOpacity>
           ) : (
             sorted.map((c, i) => (
-              <View
+              <Pressable
                 key={c.id}
+                onPress={() => openEdit(c)}
                 style={[s.row, i > 0 && { borderTopWidth: 1, borderTopColor: '#1A1A1A' }]}
               >
                 <View
@@ -126,13 +207,82 @@ export default function Recurrings() {
                 <Text style={[s.rowAmount, c.paid && s.rowAmountPaid]}>
                   {fmt(parseAmt(c.amount), symbol)}
                 </Text>
-              </View>
+              </Pressable>
             ))
           )}
         </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <Modal visible={costModal.visible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={s.overlay}>
+            <View style={s.sheet}>
+              <Text style={s.sheetTitle}>
+                {costModal.editing ? 'Edit Cost' : 'Add Monthly Cost'}
+              </Text>
+              <Text style={s.inputLabel}>Name</Text>
+              <TextInput
+                style={s.input}
+                value={formName}
+                onChangeText={setFormName}
+                placeholder="e.g. Netflix"
+                placeholderTextColor="#444"
+                autoFocus
+              />
+              <View style={s.row2col}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.inputLabel}>Amount ({currency})</Text>
+                  <TextInput
+                    style={s.input}
+                    value={formAmount}
+                    onChangeText={setFormAmount}
+                    placeholder="0.00"
+                    placeholderTextColor="#444"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={{ width: 110 }}>
+                  <Text style={s.inputLabel}>Due day</Text>
+                  <TextInput
+                    style={s.input}
+                    value={formDueDay}
+                    onChangeText={setFormDueDay}
+                    placeholder="15"
+                    placeholderTextColor="#444"
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                </View>
+              </View>
+              <View style={s.sheetActions}>
+                <TouchableOpacity
+                  style={s.btnCancel}
+                  onPress={() => setCostModal({ visible: false, editing: null })}
+                >
+                  <Text style={s.btnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.btnSave} onPress={saveForm}>
+                  <Text style={s.btnSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+              {costModal.editing && (
+                <TouchableOpacity
+                  style={s.deleteLink}
+                  onPress={() => removeForm(costModal.editing!)}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+                  <Text style={s.deleteLinkText}>Delete cost</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -180,8 +330,23 @@ const s = StyleSheet.create({
     borderColor: '#1E1E1E',
     overflow: 'hidden',
   },
-  cardHeader: { padding: 18 },
+  cardHeader: {
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
+  addBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#161616',
+    borderWidth: 1,
+    borderColor: '#1F3A30',
+  },
 
   row: {
     flexDirection: 'row',
@@ -209,4 +374,74 @@ const s = StyleSheet.create({
   empty: { alignItems: 'center', paddingVertical: 40, gap: 8, paddingHorizontal: 24 },
   emptyText: { fontSize: 14, color: '#777', fontWeight: '600' },
   emptyHint: { fontSize: 12, color: '#555', textAlign: 'center' },
+
+  // Add / edit cost sheet
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 44,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: '#2C2C2C',
+    maxHeight: '85%',
+  },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', letterSpacing: -0.3, marginBottom: 16 },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#222',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#FFF',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+    fontWeight: '500',
+  },
+  row2col: { flexDirection: 'row', gap: 12 },
+  sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  btnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#222',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  btnCancelText: { fontSize: 15, color: '#666', fontWeight: '500' },
+  btnSave: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#00C896',
+    alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
+  deleteLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  deleteLinkText: { fontSize: 13, color: '#FF6B6B', fontWeight: '500' },
 });
