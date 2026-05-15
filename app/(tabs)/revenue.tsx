@@ -79,7 +79,7 @@ export default function Revenue() {
   );
 
   if (!state) {
-    return <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]} />;
+    return <View style={[s.container, { paddingBottom: insets.bottom }]} />;
   }
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
@@ -253,10 +253,7 @@ export default function Revenue() {
   };
 
   return (
-    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={s.header}>
-        <Text style={s.headerTitle}>REVENUE</Text>
-      </View>
+    <View style={[s.container, { paddingBottom: insets.bottom }]}>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* New-year reminder banner */}

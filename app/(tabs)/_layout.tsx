@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Pressable, ScrollView, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { withLayoutContext } from 'expo-router';
 import {
   createMaterialTopTabNavigator,
   type MaterialTopTabBarProps,
 } from '@react-navigation/material-top-tabs';
-import { Ionicons } from '@expo/vector-icons';
 import { SetupData, getSetup, peekSetup, refreshSetup, subscribeSetup } from '../../lib/setup';
 
 // react-native-pager-view under the hood → real finger-tracked paging.
@@ -30,51 +29,91 @@ const DEFAULT_SETUP: SetupData = {
 // `href: setup.showX ? undefined : null` visibility exactly.
 const TABS: {
   name: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
   visible: (s: SetupData) => boolean;
 }[] = [
-  { name: 'index', icon: 'home-outline', visible: () => true },
-  { name: 'investments', icon: 'trending-up-outline', visible: (s) => s.showInvestments },
-  { name: 'savings', icon: 'wallet-outline', visible: (s) => s.showSavings },
-  { name: 'revenue', icon: 'bar-chart-outline', visible: (s) => s.showRevenue },
-  { name: 'debts', icon: 'document-text-outline', visible: (s) => s.showDebts },
-  { name: 'net-worth', icon: 'pulse-outline', visible: (s) => s.showNetWorth },
-  { name: 'settings', icon: 'person-circle-outline', visible: () => true },
+  { name: 'index', title: 'Dashboard', visible: () => true },
+  { name: 'investments', title: 'Investments', visible: (s) => s.showInvestments },
+  { name: 'savings', title: 'Savings', visible: (s) => s.showSavings },
+  { name: 'revenue', title: 'Revenue', visible: (s) => s.showRevenue },
+  { name: 'debts', title: 'Debts', visible: (s) => s.showDebts },
+  { name: 'net-worth', title: 'Net Worth', visible: (s) => s.showNetWorth },
+  { name: 'settings', title: 'Settings', visible: () => true },
 ];
 
-const ICON_FOR: Record<string, keyof typeof Ionicons.glyphMap> = Object.fromEntries(
-  TABS.map((t) => [t.name, t.icon]),
+const TITLE_FOR: Record<string, string> = Object.fromEntries(
+  TABS.map((t) => [t.name, t.title]),
 );
 
-function BottomBar({ state, navigation }: MaterialTopTabBarProps) {
+// Copilot-style segmented pill row at the top, horizontally scrollable so any
+// number of tabs fits. The focused pill auto-scrolls into view, so swiping to
+// an off-screen tab still keeps its pill visible.
+function TopBar({ state, navigation }: MaterialTopTabBarProps) {
   const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
+  const layouts = useRef<Record<number, { x: number; width: number }>>({});
+  const viewport = useRef(0);
+
+  const scrollActiveIntoView = (index: number, animated = true) => {
+    const l = layouts.current[index];
+    if (!l || !viewport.current) return;
+    const target = l.x + l.width / 2 - viewport.current / 2;
+    scrollRef.current?.scrollTo({ x: Math.max(0, target), animated });
+  };
+
+  useEffect(() => {
+    // Non-animated: rapid tab changes (fast swipe/tap) would otherwise stack
+    // competing glide animations and stutter. Snapping keeps it smooth and
+    // consistent with the instant pill-highlight change.
+    scrollActiveIntoView(state.index, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.index]);
+
   return (
-    <View style={[styles.bar, { paddingBottom: insets.bottom + 4 }]}>
-      {state.routes.map((route, i) => {
-        const focused = state.index === i;
-        return (
-          <Pressable
-            key={route.key}
-            style={styles.tab}
-            onPress={() => {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-              if (!focused && !event.defaultPrevented) {
-                navigation.navigate(route.name);
-              }
-            }}
-          >
-            <Ionicons
-              name={ICON_FOR[route.name] ?? 'ellipse-outline'}
-              size={24}
-              color={focused ? '#FFF' : '#555'}
-            />
-          </Pressable>
-        );
-      })}
+    <View style={[styles.bar, { paddingTop: insets.top + 10 }]}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        contentContainerStyle={styles.row}
+        onLayout={(e) => {
+          viewport.current = e.nativeEvent.layout.width;
+          // On (re)mount the effect above fires before pills have measured;
+          // once the viewport is known, snap the active pill into view.
+          scrollActiveIntoView(state.index, false);
+        }}
+      >
+        {state.routes.map((route, i) => {
+          const focused = state.index === i;
+          return (
+            <Pressable
+              key={route.key}
+              onLayout={(e) => {
+                const { x, width } = e.nativeEvent.layout;
+                layouts.current[i] = { x, width };
+                // After a remount the active pill measures last; snap to it.
+                if (i === state.index) scrollActiveIntoView(i, false);
+              }}
+              style={[styles.pill, focused && styles.pillActive]}
+              onPress={() => {
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true,
+                });
+                if (!focused && !event.defaultPrevented) {
+                  navigation.navigate(route.name);
+                }
+              }}
+            >
+              <Text style={[styles.pillText, focused && styles.pillTextActive]}>
+                {TITLE_FOR[route.name] ?? route.name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </View>
   );
 }
@@ -113,8 +152,8 @@ export default function TabLayout() {
   return (
     <MaterialTopTabs
       key={navKey}
-      tabBarPosition="bottom"
-      tabBar={(props) => <BottomBar {...props} />}
+      tabBarPosition="top"
+      tabBar={(props) => <TopBar {...props} />}
       style={{ backgroundColor: '#0D0D0D' }}
       // Snap (no animation) for tab taps; finger-tracked swipe still animates
       // (RNTV keeps swipe animation regardless of this flag).
@@ -129,11 +168,30 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   bar: {
-    flexDirection: 'row',
     backgroundColor: '#0D0D0D',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#1C1C1C',
-    paddingTop: 8,
+    paddingBottom: 18,
   },
-  tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  row: {
+    paddingHorizontal: 14,
+    gap: 8,
+    alignItems: 'center',
+  },
+  pill: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  pillActive: {
+    backgroundColor: '#1C1C1C',
+  },
+  pillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    letterSpacing: 0.2,
+  },
+  pillTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
 });

@@ -482,9 +482,8 @@ export default function Dashboard() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={s.header}>
-        <Text style={s.headerTitle}>DASHBOARD</Text>
+    <View style={[s.container, { paddingBottom: insets.bottom }]}>
+      <View style={[s.header, { justifyContent: 'flex-end' }]}>
         <View style={s.headerActions}>
           <TouchableOpacity
             style={[s.headerEditBtn, editMode && s.headerEditBtnActive]}

@@ -108,10 +108,7 @@ export default function Settings() {
   const selectedCurrency = CURRENCIES.find((c) => c.code === currency);
 
   return (
-    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={s.header}>
-        <Text style={s.headerTitle}>SETTINGS</Text>
-      </View>
+    <View style={[s.container, { paddingBottom: insets.bottom }]}>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 

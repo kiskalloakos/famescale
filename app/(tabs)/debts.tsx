@@ -18,7 +18,7 @@ import { CURRENCIES } from '../../lib/currencies';
 import { Debt, getDebts, peekDebts, refreshDebts, saveDebt, deleteDebt } from '../../lib/debts';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
-import { glowGreen, glowAmber } from '../../lib/glows';
+import { glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { useDragReorder } from '../../lib/useDragReorder';
 import DraggableRow from '../../components/DraggableRow';
@@ -164,22 +164,7 @@ export default function Debts() {
   };
 
   return (
-    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={s.header}>
-        <Text style={s.headerTitle}>DEBTS</Text>
-        <TouchableOpacity
-          style={[s.headerEditBtn, editMode && s.headerEditBtnActive]}
-          onPress={() => setEditMode((e) => !e)}
-        >
-          <Ionicons
-            name="pencil-outline"
-            size={15}
-            color={editMode ? '#00C896' : '#777'}
-            style={editMode ? glowGreen : undefined}
-          />
-        </TouchableOpacity>
-      </View>
-
+    <View style={[s.container, { paddingBottom: insets.bottom }]}>
       <SortableScroll contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero — total owed */}
         <View style={s.heroCard}>
@@ -199,6 +184,17 @@ export default function Debts() {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <Text style={s.cardTitle}>Outstanding</Text>
+            <TouchableOpacity
+              style={[s.headerEditBtn, editMode && s.headerEditBtnActive]}
+              onPress={() => setEditMode((e) => !e)}
+            >
+              <Ionicons
+                name="pencil-outline"
+                size={15}
+                color={editMode ? '#FFA94D' : '#777'}
+                style={editMode ? glowAmber : undefined}
+              />
+            </TouchableOpacity>
           </View>
 
           {debts.length === 0 ? (
@@ -338,9 +334,9 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   headerEditBtnActive: {
-    backgroundColor: '#0D1F1A',
-    borderColor: '#1F3A30',
-    shadowColor: '#00C896',
+    backgroundColor: '#241804',
+    borderColor: '#3A2A0F',
+    shadowColor: '#FFA94D',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -379,7 +375,12 @@ const s = StyleSheet.create({
     borderColor: '#222',
     overflow: 'hidden',
   },
-  cardHeader: { padding: 18 },
+  cardHeader: {
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
 
   row: {

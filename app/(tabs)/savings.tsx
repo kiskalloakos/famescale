@@ -115,10 +115,7 @@ export default function Savings() {
   };
 
   return (
-    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={s.header}>
-        <Text style={s.headerTitle}>SAVINGS</Text>
-      </View>
+    <View style={[s.container, { paddingBottom: insets.bottom }]}>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <TouchableOpacity style={s.heroCard} onPress={openEdit} activeOpacity={0.85}>

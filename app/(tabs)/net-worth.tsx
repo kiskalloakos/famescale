@@ -97,10 +97,7 @@ export default function NetWorth() {
   };
 
   return (
-    <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={s.header}>
-        <Text style={s.headerTitle}>NET WORTH</Text>
-      </View>
+    <View style={[s.container, { paddingBottom: insets.bottom }]}>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.heroCard}>
