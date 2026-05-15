@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { CURRENCIES } from '../../lib/currencies';
 import { Debt, getDebts, peekDebts, refreshDebts, saveDebt, deleteDebt } from '../../lib/debts';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
@@ -24,15 +25,6 @@ import DraggableRow from '../../components/DraggableRow';
 import SortableScroll from '../../components/SortableScroll';
 import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 import { NestableDraggableFlatList, RenderItemParams } from 'react-native-draggable-flatlist';
-
-const CURRENCIES = [
-  { code: 'RON', symbol: 'lei ' },
-  { code: 'USD', symbol: '$' },
-  { code: 'EUR', symbol: '€' },
-  { code: 'GBP', symbol: '£' },
-  { code: 'HUF', symbol: 'Ft ' },
-  { code: 'CHF', symbol: 'Fr ' },
-];
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

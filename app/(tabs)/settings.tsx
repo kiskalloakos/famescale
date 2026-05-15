@@ -22,16 +22,8 @@ import {
 } from '../../lib/currency';
 import { supabase } from '../../lib/supabase';
 import { glowGreen } from '../../lib/glows';
+import { CURRENCIES } from '../../lib/currencies';
 import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
-
-const CURRENCIES = [
-  { code: 'RON', symbol: 'lei', name: 'Romanian Leu' },
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-  { code: 'GBP', symbol: '£', name: 'British Pound' },
-  { code: 'HUF', symbol: 'Ft', name: 'Hungarian Forint' },
-  { code: 'CHF', symbol: 'Fr', name: 'Swiss Franc' },
-];
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
@@ -147,7 +139,7 @@ export default function Settings() {
             </View>
             <Text style={s.rowLabel}>Currency</Text>
             <View style={s.rowRight}>
-              <Text style={s.rowValue}>{selectedCurrency?.symbol}  {selectedCurrency?.code}</Text>
+              <Text style={s.rowValue}>{selectedCurrency?.symbol?.trim()}  {selectedCurrency?.code}</Text>
               <Ionicons name="chevron-forward" size={14} color="#333" style={{ marginLeft: 6 }} />
             </View>
           </TouchableOpacity>
@@ -320,7 +312,7 @@ export default function Settings() {
                   return pages.map((p, i) => {
                     const override = overrides[p.key];
                     const effective = override ?? currency;
-                    const symbolFor = CURRENCIES.find((c) => c.code === effective)?.symbol ?? effective;
+                    const symbolFor = (CURRENCIES.find((c) => c.code === effective)?.symbol ?? effective).trim();
                     return (
                       <TouchableOpacity
                         key={p.key}

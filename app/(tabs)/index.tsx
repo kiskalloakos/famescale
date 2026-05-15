@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { CURRENCIES } from '../../lib/currencies';
 import {
   Account,
   Cost,
@@ -66,15 +67,6 @@ function txDayLabel(iso: string): string {
   if (isYesterday) return `Yesterday, ${time}`;
   return `${MONTH_NAMES[d.getMonth()].slice(0, 3)} ${d.getDate()}, ${time}`;
 }
-
-const CURRENCIES = [
-  { code: 'RON', symbol: 'lei ' },
-  { code: 'USD', symbol: '$' },
-  { code: 'EUR', symbol: '€' },
-  { code: 'GBP', symbol: '£' },
-  { code: 'HUF', symbol: 'Ft ' },
-  { code: 'CHF', symbol: 'Fr ' },
-];
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

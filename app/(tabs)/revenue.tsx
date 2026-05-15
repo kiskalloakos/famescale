@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { CURRENCIES } from '../../lib/currencies';
 import {
   RevenueState,
   RevenueEntry,
@@ -33,15 +34,6 @@ import { showToast } from '../../lib/toast';
 import { glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
-
-const CURRENCIES = [
-  { code: 'RON', symbol: 'lei ' },
-  { code: 'USD', symbol: '$' },
-  { code: 'EUR', symbol: '€' },
-  { code: 'GBP', symbol: '£' },
-  { code: 'HUF', symbol: 'Ft ' },
-  { code: 'CHF', symbol: 'Fr ' },
-];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const YEAR_PICKER_RANGE = 30; // years back from current calendar year

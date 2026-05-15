@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrency, peekCurrencySettings, refreshCurrency } from '../../lib/currency';
+import { CURRENCIES } from '../../lib/currencies';
 import { getDashboard, peekDashboard, refreshDashboard } from '../../lib/dashboard';
 import { getInvestments, peekInvestments, refreshInvestments } from '../../lib/investments';
 import { getSavings, peekSavings, refreshSavings } from '../../lib/savings';
@@ -12,15 +13,6 @@ import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup, subscribeSetup
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
-
-const CURRENCIES = [
-  { code: 'RON', symbol: 'lei ' },
-  { code: 'USD', symbol: '$' },
-  { code: 'EUR', symbol: '€' },
-  { code: 'GBP', symbol: '£' },
-  { code: 'HUF', symbol: 'Ft ' },
-  { code: 'CHF', symbol: 'Fr ' },
-];
 
 function fmt(value: number, symbol: string): string {
   const abs = Math.abs(value);
