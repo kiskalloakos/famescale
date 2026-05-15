@@ -17,7 +17,8 @@ type TrackKey =
   | 'showSavings'
   | 'showRevenue'
   | 'showDebts'
-  | 'showNetWorth';
+  | 'showNetWorth'
+  | 'showGoals';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei', name: 'Romanian Leu' },
@@ -64,6 +65,12 @@ const TRACKABLES: {
     desc: 'Cash + investments − debts in one number.',
     icon: 'pulse-outline',
   },
+  {
+    key: 'showGoals',
+    title: 'Goals',
+    desc: 'Savings & payoff targets with progress.',
+    icon: 'flag-outline',
+  },
 ];
 
 export default function OnboardingFlow({ onComplete }: Props) {
@@ -75,6 +82,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
     showRevenue: false,
     showDebts: false,
     showNetWorth: false,
+    showGoals: false,
   });
 
   const toggle = (key: TrackKey) => setTracks((t) => ({ ...t, [key]: !t[key] }));
@@ -89,6 +97,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
       showRecurrings: true,
       showDebts: tracks.showDebts,
       showNetWorth: tracks.showNetWorth,
+      showGoals: tracks.showGoals,
       includeDebtsInNetWorth: true,
     });
     onComplete();

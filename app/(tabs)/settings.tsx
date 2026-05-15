@@ -90,7 +90,8 @@ export default function Settings() {
       | 'showSavings'
       | 'showRevenue'
       | 'showDebts'
-      | 'showNetWorth',
+      | 'showNetWorth'
+      | 'showGoals',
   ) => {
     if (!setup) return;
     const next: SetupData = { ...setup, [key]: !setup[key] };
@@ -170,7 +171,8 @@ export default function Settings() {
                     | 'showSavings'
                     | 'showRevenue'
                     | 'showDebts'
-                    | 'showNetWorth';
+                    | 'showNetWorth'
+                    | 'showGoals';
                   icon: keyof typeof Ionicons.glyphMap;
                   title: string;
                   desc: string;
@@ -204,6 +206,12 @@ export default function Settings() {
                     icon: 'pulse-outline',
                     title: 'Net Worth',
                     desc: 'Cash + investments − debts in one number.',
+                  },
+                  {
+                    key: 'showGoals',
+                    icon: 'flag-outline',
+                    title: 'Goals',
+                    desc: 'Savings & payoff targets with progress.',
                   },
                 ];
                 return items.map((item, i) => {

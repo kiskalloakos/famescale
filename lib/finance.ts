@@ -58,6 +58,18 @@ export function computeNetWorth(
   return { investmentsEnabled, savingsEnabled, debtsEnabled, debtsCountInTotal, investedTotal, netWorth };
 }
 
+// How much to set aside per month to hit a goal's target by its deadline.
+// Never negative; if already at/over target → 0. monthsLeft is clamped to
+// >= 1 so a same-month deadline doesn't divide by zero.
+export function goalMonthlyPace(
+  target: number,
+  current: number,
+  monthsLeft: number,
+): number {
+  const remaining = Math.max(0, target - current);
+  return remaining / Math.max(1, monthsLeft);
+}
+
 // Monthly cost auto-reset. A cost that was marked paid in a *previous* month
 // is un-paid for the new month (the past payment stays deducted — no refund).
 // Pure: returns the rebuilt list plus the subset that changed, so the caller

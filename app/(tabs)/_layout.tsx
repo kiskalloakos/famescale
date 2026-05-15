@@ -23,6 +23,7 @@ const DEFAULT_SETUP: SetupData = {
   showDebts: false,
   showNetWorth: false,
   showRecurrings: false,
+  showGoals: false,
   includeDebtsInNetWorth: true,
 };
 
@@ -41,6 +42,7 @@ const TABS: {
   { name: 'revenue', title: 'Revenue', visible: (s) => s.showRevenue },
   { name: 'debts', title: 'Debts', visible: (s) => s.showDebts },
   { name: 'net-worth', title: 'Net Worth', visible: (s) => s.showNetWorth },
+  { name: 'goals', title: 'Goals', visible: (s) => s.showGoals },
   { name: 'settings', title: 'Settings', visible: () => true },
 ];
 

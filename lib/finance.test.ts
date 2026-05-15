@@ -1,5 +1,11 @@
 import { describe, it, expect } from '@jest/globals';
-import { fv, monthsSinceStart, computeNetWorth, resetStaleCosts } from './finance';
+import {
+  fv,
+  monthsSinceStart,
+  computeNetWorth,
+  resetStaleCosts,
+  goalMonthlyPace,
+} from './finance';
 
 describe('fv — future value of lump sum + monthly contributions', () => {
   it('zero rate, no contributions: value is unchanged', () => {
@@ -192,5 +198,22 @@ describe('resetStaleCosts — monthly un-pay of last month’s costs', () => {
 
   it('empty list yields empty result', () => {
     expect(resetStaleCosts([], '2026-05')).toEqual({ next: [], reset: [] });
+  });
+});
+
+describe('goalMonthlyPace — set-aside per month to hit a target', () => {
+  it('splits the remaining amount across the months left', () => {
+    expect(goalMonthlyPace(1200, 0, 12)).toBe(100);
+    expect(goalMonthlyPace(1000, 400, 6)).toBe(100);
+  });
+
+  it('returns 0 once the goal is met or exceeded', () => {
+    expect(goalMonthlyPace(1000, 1000, 5)).toBe(0);
+    expect(goalMonthlyPace(1000, 1500, 5)).toBe(0);
+  });
+
+  it('clamps months to >= 1 (no divide-by-zero on a same-month deadline)', () => {
+    expect(goalMonthlyPace(800, 0, 0)).toBe(800);
+    expect(goalMonthlyPace(800, 0, -3)).toBe(800);
   });
 });
