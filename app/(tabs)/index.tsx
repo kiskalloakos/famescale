@@ -12,7 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import { CURRENCIES } from '../../lib/currencies';
@@ -85,23 +85,15 @@ function ordinal(n: number): string {
 
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
-  const [costsExpanded, setCostsExpanded] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
   const [accountModal, setAccountModal] = useState<{ visible: boolean; editing: Account | null }>({
     visible: false,
     editing: null,
-  });
-  const [costModal, setCostModal] = useState<{ visible: boolean; editing: Cost | null }>({
-    visible: false,
-    editing: null,
-  });
-  const [accountPicker, setAccountPicker] = useState<{ visible: boolean; cost: Cost | null }>({
-    visible: false,
-    cost: null,
   });
   const [moneyModal, setMoneyModal] = useState<{ visible: boolean; mode: 'add' | 'remove' }>({
     visible: false,
@@ -118,7 +110,6 @@ export default function Dashboard() {
 
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
-  const [formDueDay, setFormDueDay] = useState('1');
 
   const closeMoneyModal = useCallback(() => {
     setMoneyModal((prev) => ({ ...prev, visible: false }));
@@ -225,20 +216,7 @@ export default function Dashboard() {
     });
   }, []);
 
-  const reorderCosts = useCallback(async (next: Cost[]) => {
-    const repositioned = next.map((c, i) => ({ ...c, position: i }));
-    feedback.dragEnd();
-    setCosts((prev) => {
-      for (const c of repositioned) {
-        const orig = prev.find((p) => p.id === c.id);
-        if (orig && orig.position !== c.position) persistCost(c);
-      }
-      return repositioned;
-    });
-  }, []);
-
   const accountDrag = useDragReorder(accounts, reorderAccounts);
-  const costDrag = useDragReorder(costs, reorderCosts);
 
   // ── Native renderers for NestableDraggableFlatList ────────────────────────
   const renderAccountItem = useCallback(
@@ -271,52 +249,6 @@ export default function Dashboard() {
     [accounts.length, symbol, editMode],
   );
 
-  const renderCostItem = useCallback(
-    ({ item: cost, drag, isActive }: RenderItemParams<Cost>) => {
-      const paidFromAccount = cost.paidFromAccountId
-        ? accounts.find((a) => a.id === cost.paidFromAccountId)
-        : null;
-      return (
-        <View style={[s.costRow, isActive && s.rowDragging]}>
-          {editMode && costs.length > 1 && (
-            <TouchableOpacity onLongPress={drag} delayLongPress={120} style={s.dragHandle}>
-              <Ionicons name="reorder-three-outline" size={18} color="#444" />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={() => tapTickbox(cost)} style={s.checkbox}>
-            <Ionicons
-              name={cost.paid ? 'checkmark-circle' : 'ellipse-outline'}
-              size={22}
-              color={cost.paid ? '#00C896' : '#3A3A3A'}
-              style={cost.paid ? glowGreen : undefined}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.costBody}
-            onPress={editMode ? () => openEditCost(cost) : undefined}
-            activeOpacity={editMode ? 0.2 : 1}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[s.rowLabel, cost.paid && s.strikethrough]}>{cost.name}</Text>
-              <Text style={s.costMeta}>
-                {cost.paid && paidFromAccount
-                  ? `paid from ${paidFromAccount.name}`
-                  : cost.paid
-                    ? 'paid'
-                    : `due ${ordinal(cost.dueDay)}`}
-              </Text>
-            </View>
-            <Text style={s.rowValue}>{fmt(parseAmt(cost.amount), symbol)}</Text>
-            {editMode && (
-              <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
-            )}
-          </TouchableOpacity>
-        </View>
-      );
-    },
-    [accounts, costs.length, symbol, editMode],
-  );
-
   const deleteAccount = async (account: Account) => {
     setAccountModal({ visible: false, editing: null });
     setAccounts((prev) => prev.filter((a) => a.id !== account.id));
@@ -327,57 +259,6 @@ export default function Dashboard() {
       onPress: async () => {
         setAccounts((prev) => [...prev, account]);
         await persistAccount(account);
-      },
-    });
-  };
-
-  // ── Costs ─────────────────────────────────────────────────────────────────
-  const openAddCost = () => {
-    setFormName('');
-    setFormAmount('');
-    setFormDueDay(String(new Date().getDate()));
-    setCostModal({ visible: true, editing: null });
-  };
-
-  const openEditCost = (cost: Cost) => {
-    setFormName(cost.name);
-    setFormAmount(cost.amount);
-    setFormDueDay(String(cost.dueDay));
-    setCostModal({ visible: true, editing: cost });
-  };
-
-  const saveCost = async () => {
-    if (!formName.trim()) return;
-    const editing = costModal.editing;
-    const dueDay = Math.min(31, Math.max(1, parseInt(formDueDay) || 1));
-    const cost: Cost = editing
-      ? { ...editing, name: formName.trim(), amount: formAmount, dueDay }
-      : {
-          id: newId(),
-          name: formName.trim(),
-          amount: formAmount,
-          paid: false,
-          position: costs.length,
-          dueDay,
-          paidFromAccountId: null,
-          paidMonth: null,
-        };
-    setCosts(editing ? costs.map((c) => (c.id === editing.id ? cost : c)) : [...costs, cost]);
-    setCostModal({ visible: false, editing: null });
-    feedback.success();
-    await persistCost(cost);
-  };
-
-  const deleteCost = async (cost: Cost) => {
-    setCostModal({ visible: false, editing: null });
-    setCosts((prev) => prev.filter((c) => c.id !== cost.id));
-    feedback.destroy();
-    await removeCost(cost.id);
-    showToast(`Deleted ${cost.name}`, {
-      label: 'Undo',
-      onPress: async () => {
-        setCosts((prev) => [...prev, cost]);
-        await persistCost(cost);
       },
     });
   };
@@ -412,75 +293,6 @@ export default function Dashboard() {
     await Promise.all([
       persistAccount(updated),
       logTransaction({ accountId: account.id, amount, direction, kind: 'manual', note }),
-    ]);
-  };
-
-  // ── Pay / unpay flow ──────────────────────────────────────────────────────
-  const tapTickbox = (cost: Cost) => {
-    if (cost.paid) {
-      // Untick — refund the amount to the account it was paid from (if it still exists)
-      const refundTo = cost.paidFromAccountId
-        ? accounts.find((a) => a.id === cost.paidFromAccountId)
-        : null;
-      if (refundTo) {
-        const updatedAccount: Account = {
-          ...refundTo,
-          amount: String(parseAmt(refundTo.amount) + parseAmt(cost.amount)),
-        };
-        setAccounts(accounts.map((a) => (a.id === updatedAccount.id ? updatedAccount : a)));
-        persistAccount(updatedAccount);
-        logTransaction({
-          accountId: refundTo.id,
-          amount: parseAmt(cost.amount),
-          direction: 'in',
-          kind: 'refund',
-          referenceId: cost.id,
-          note: cost.name,
-        });
-      }
-      const updated: Cost = { ...cost, paid: false, paidFromAccountId: null, paidMonth: null };
-      setCosts(costs.map((c) => (c.id === cost.id ? updated : c)));
-      persistCost(updated);
-      feedback.select();
-      return;
-    }
-    // Not paid yet — ask which account to pay with
-    if (accounts.length === 0) {
-      Alert.alert('No accounts', 'Add a cash account first so you can pay this cost.');
-      return;
-    }
-    feedback.tap();
-    setAccountPicker({ visible: true, cost });
-  };
-
-  const payFromAccount = async (account: Account) => {
-    const cost = accountPicker.cost;
-    if (!cost) return;
-    const updatedAccount: Account = {
-      ...account,
-      amount: String(parseAmt(account.amount) - parseAmt(cost.amount)),
-    };
-    const updatedCost: Cost = {
-      ...cost,
-      paid: true,
-      paidFromAccountId: account.id,
-      paidMonth: currentMonthKey(),
-    };
-    setAccounts(accounts.map((a) => (a.id === account.id ? updatedAccount : a)));
-    setCosts(costs.map((c) => (c.id === cost.id ? updatedCost : c)));
-    setAccountPicker({ visible: false, cost: null });
-    feedback.success();
-    await Promise.all([
-      persistAccount(updatedAccount),
-      persistCost(updatedCost),
-      logTransaction({
-        accountId: account.id,
-        amount: parseAmt(cost.amount),
-        direction: 'out',
-        kind: 'cost',
-        referenceId: cost.id,
-        note: cost.name,
-      }),
     ]);
   };
 
@@ -591,101 +403,22 @@ export default function Dashboard() {
           )}
         </View>
 
-        {/* Monthly Costs */}
-        <View style={s.card}>
-          <TouchableOpacity
-            style={s.cardHeader}
-            onPress={() => setCostsExpanded(!costsExpanded)}
-            activeOpacity={0.7}
-          >
+        {/* Monthly costs — managed in Recurrings now; this is a summary */}
+        <TouchableOpacity
+          style={s.card}
+          activeOpacity={0.7}
+          onPress={() => router.navigate('/recurrings')}
+        >
+          <View style={s.cardHeader}>
             <View>
               <Text style={s.cardTitle}>Monthly Costs</Text>
               <Text style={s.cardSubtitle}>
-                {fmt(unpaidCosts, symbol)} unpaid · {fmt(costs.reduce((s, c) => s + parseAmt(c.amount), 0), symbol)} total
+                {fmt(unpaidCosts, symbol)} unpaid · {fmt(costs.reduce((sum, c) => sum + parseAmt(c.amount), 0), symbol)} total
               </Text>
             </View>
-            <Ionicons
-              name={costsExpanded ? 'chevron-up' : 'chevron-down'}
-              size={18}
-              color="#555"
-            />
-          </TouchableOpacity>
-
-          {costsExpanded && (
-            <>
-              {costs.length === 0 ? (
-                <TouchableOpacity style={s.empty} onPress={openAddCost}>
-                  <Ionicons name="receipt-outline" size={26} color="#333" />
-                  <Text style={s.emptyText}>Add a monthly cost</Text>
-                </TouchableOpacity>
-              ) : Platform.OS === 'web' ? (
-                costs.map((cost) => {
-                  const paidFromAccount = cost.paidFromAccountId
-                    ? accounts.find((a) => a.id === cost.paidFromAccountId)
-                    : null;
-                  const d = costDrag(cost.id);
-                  return (
-                    <DraggableRow
-                      key={cost.id}
-                      handlers={{ ...d, draggable: d.draggable && editMode && costs.length > 1 }}
-                      style={[
-                        s.costRow,
-                        d.isDragging && s.rowDragging,
-                        d.isHovered && s.rowDropTarget,
-                      ]}
-                    >
-                      {editMode && costs.length > 1 && Platform.OS === 'web' && (
-                        <View style={s.dragHandle}>
-                          <Ionicons name="reorder-three-outline" size={18} color="#444" />
-                        </View>
-                      )}
-                      <TouchableOpacity onPress={() => tapTickbox(cost)} style={s.checkbox}>
-                        <Ionicons
-                          name={cost.paid ? 'checkmark-circle' : 'ellipse-outline'}
-                          size={22}
-                          color={cost.paid ? '#00C896' : '#3A3A3A'}
-                          style={cost.paid ? glowGreen : undefined}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={s.costBody}
-                        onPress={editMode ? () => openEditCost(cost) : undefined}
-                        activeOpacity={editMode ? 0.2 : 1}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={[s.rowLabel, cost.paid && s.strikethrough]}>{cost.name}</Text>
-                          <Text style={s.costMeta}>
-                            {cost.paid && paidFromAccount
-                              ? `paid from ${paidFromAccount.name}`
-                              : cost.paid
-                                ? 'paid'
-                                : `due ${ordinal(cost.dueDay)}`}
-                          </Text>
-                        </View>
-                        <Text style={s.rowValue}>{fmt(parseAmt(cost.amount), symbol)}</Text>
-                        {editMode && (
-                          <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
-                        )}
-                      </TouchableOpacity>
-                    </DraggableRow>
-                  );
-                })
-              ) : (
-                <NestableDraggableFlatList
-                  data={costs}
-                  keyExtractor={(c) => c.id}
-                  renderItem={renderCostItem}
-                  onDragEnd={({ data }) => reorderCosts(data)}
-                  activationDistance={5}
-                />
-              )}
-              <TouchableOpacity style={s.addCostRow} onPress={openAddCost}>
-                <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
-                <Text style={[s.addCostText, glowGreen]}>Add Cost</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+            <Ionicons name="chevron-forward" size={18} color="#555" />
+          </View>
+        </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </SortableScroll>
@@ -741,72 +474,6 @@ export default function Dashboard() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Cost Modal */}
-      <Modal visible={costModal.visible} transparent animationType="slide">
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={s.overlay}>
-            <View style={s.sheet}>
-              <Text style={s.sheetTitle}>
-                {costModal.editing ? 'Edit Cost' : 'Add Monthly Cost'}
-              </Text>
-              <Text style={s.inputLabel}>Name</Text>
-              <TextInput
-                style={s.input}
-                value={formName}
-                onChangeText={setFormName}
-                placeholder="e.g. Netflix"
-                placeholderTextColor="#444"
-                autoFocus
-              />
-              <View style={s.row2col}>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.inputLabel}>Amount ({currency})</Text>
-                  <TextInput
-                    style={s.input}
-                    value={formAmount}
-                    onChangeText={setFormAmount}
-                    placeholder="0.00"
-                    placeholderTextColor="#444"
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-                <View style={{ width: 110 }}>
-                  <Text style={s.inputLabel}>Due day</Text>
-                  <TextInput
-                    style={s.input}
-                    value={formDueDay}
-                    onChangeText={setFormDueDay}
-                    placeholder="15"
-                    placeholderTextColor="#444"
-                    keyboardType="number-pad"
-                    maxLength={2}
-                  />
-                </View>
-              </View>
-              <View style={s.sheetActions}>
-                <TouchableOpacity
-                  style={s.btnCancel}
-                  onPress={() => setCostModal({ visible: false, editing: null })}
-                >
-                  <Text style={s.btnCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={s.btnSave} onPress={saveCost}>
-                  <Text style={s.btnSaveText}>Save</Text>
-                </TouchableOpacity>
-              </View>
-              {costModal.editing && (
-                <TouchableOpacity
-                  style={s.deleteLink}
-                  onPress={() => deleteCost(costModal.editing!)}
-                >
-                  <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
-                  <Text style={s.deleteLinkText}>Delete cost</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Add / remove money sheet */}
       <Modal visible={moneyModal.visible} transparent animationType="slide">
@@ -892,49 +559,6 @@ export default function Dashboard() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Account picker — "what did you pay with?" */}
-      <Modal visible={accountPicker.visible} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
-            <Text style={s.sheetTitle}>What did you pay with?</Text>
-            {accountPicker.cost && (
-              <Text style={s.pickerSub}>
-                Paying {fmt(parseAmt(accountPicker.cost.amount), symbol)} for{' '}
-                <Text style={{ color: '#FFF', fontWeight: '600' }}>{accountPicker.cost.name}</Text>
-              </Text>
-            )}
-            <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled">
-              {accounts.map((account, i) => {
-                const newBalance = accountPicker.cost
-                  ? parseAmt(account.amount) - parseAmt(accountPicker.cost.amount)
-                  : parseAmt(account.amount);
-                const goesNegative = newBalance < 0;
-                return (
-                  <TouchableOpacity
-                    key={account.id}
-                    style={[s.pickerRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#222' }]}
-                    onPress={() => payFromAccount(account)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.pickerName}>{account.name}</Text>
-                      <Text style={[s.pickerBalance, goesNegative && s.pickerNegative]}>
-                        {fmt(parseAmt(account.amount), symbol)} → {fmt(newBalance, symbol)}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color="#444" />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity
-              style={s.btnCancel}
-              onPress={() => setAccountPicker({ visible: false, cost: null })}
-            >
-              <Text style={s.btnCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Money log — bank-statement-style read-only history */}
       <Modal visible={historyVisible} transparent animationType="slide">

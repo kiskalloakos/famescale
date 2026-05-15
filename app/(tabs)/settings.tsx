@@ -89,7 +89,6 @@ export default function Settings() {
       | 'showInvestments'
       | 'showSavings'
       | 'showRevenue'
-      | 'showRecurrings'
       | 'showDebts'
       | 'showNetWorth',
   ) => {
@@ -170,7 +169,6 @@ export default function Settings() {
                     | 'showInvestments'
                     | 'showSavings'
                     | 'showRevenue'
-                    | 'showRecurrings'
                     | 'showDebts'
                     | 'showNetWorth';
                   icon: keyof typeof Ionicons.glyphMap;
@@ -194,12 +192,6 @@ export default function Settings() {
                     icon: 'bar-chart-outline',
                     title: 'Revenue',
                     desc: 'Log yearly income, monthly breakdown, growth.',
-                  },
-                  {
-                    key: 'showRecurrings',
-                    icon: 'repeat-outline',
-                    title: 'Recurrings',
-                    desc: 'Monthly bills — what’s paid and what’s left.',
                   },
                   {
                     key: 'showDebts',

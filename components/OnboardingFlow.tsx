@@ -16,7 +16,6 @@ type TrackKey =
   | 'showInvestments'
   | 'showSavings'
   | 'showRevenue'
-  | 'showRecurrings'
   | 'showDebts'
   | 'showNetWorth';
 
@@ -54,12 +53,6 @@ const TRACKABLES: {
     icon: 'bar-chart-outline',
   },
   {
-    key: 'showRecurrings',
-    title: 'Recurrings',
-    desc: 'Monthly bills — what’s paid and what’s left.',
-    icon: 'repeat-outline',
-  },
-  {
     key: 'showDebts',
     title: 'Debts',
     desc: 'What you owe — loans, cards, IOUs.',
@@ -80,7 +73,6 @@ export default function OnboardingFlow({ onComplete }: Props) {
     showInvestments: true,
     showSavings: false,
     showRevenue: false,
-    showRecurrings: false,
     showDebts: false,
     showNetWorth: false,
   });
@@ -94,7 +86,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
       showInvestments: tracks.showInvestments,
       showSavings: tracks.showSavings,
       showRevenue: tracks.showRevenue,
-      showRecurrings: tracks.showRecurrings,
+      showRecurrings: true,
       showDebts: tracks.showDebts,
       showNetWorth: tracks.showNetWorth,
       includeDebtsInNetWorth: true,
