@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useNavigation } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { SetupData, peekSetup, subscribeSetup } from '../lib/setup';
 
 // Order of tabs in the bottom tab bar. Visibility flags are sourced from
@@ -38,6 +39,7 @@ interface Props {
 
 export default function SwipeBetweenTabs({ name, children }: Props) {
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const [setup, setSetup] = useState<SetupData>(() => peekSetup() ?? DEFAULT_SETUP);
 
   useEffect(() => subscribeSetup(setSetup), []);
@@ -54,6 +56,9 @@ export default function SwipeBetweenTabs({ name, children }: Props) {
   const gesture = useMemo(
     () =>
       Gesture.Pan()
+        // only the visible tab's gesture is live, so a single swipe can't
+        // cascade through stacked screens' handlers
+        .enabled(isFocused)
         // only activate on a clear horizontal swipe
         .activeOffsetX([-30, 30])
         // bail the moment vertical motion dominates so vertical scrolls and
@@ -62,14 +67,12 @@ export default function SwipeBetweenTabs({ name, children }: Props) {
         // run callbacks on the JS thread so we can call navigation directly
         .runOnJS(true)
         .onEnd((e) => {
-          // eslint-disable-next-line no-console
-          console.log('[swipe]', name, 'tx=', e.translationX, 'vx=', e.velocityX);
           const left = e.translationX < -SWIPE_DISTANCE || e.velocityX < -SWIPE_VELOCITY;
           const right = e.translationX > SWIPE_DISTANCE || e.velocityX > SWIPE_VELOCITY;
           if (left && next) (navigation as { navigate: (n: string) => void }).navigate(next);
           else if (right && prev) (navigation as { navigate: (n: string) => void }).navigate(prev);
         }),
-    [navigation, prev, next, name],
+    [navigation, prev, next, name, isFocused],
   );
 
   return (

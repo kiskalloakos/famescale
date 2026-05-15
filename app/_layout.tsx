@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { LogBox, View, Platform } from 'react-native';
 import { Stack } from 'expo-router';
+import { ThemeProvider, DarkTheme } from '@react-navigation/native';
+
+// react-native-screens paints the native screen container with
+// theme.colors.background. Default light theme = white flashes during tab
+// swipes. Force the app's dark surface so every transition frame stays dark.
+const AppDarkTheme = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: '#0D0D0D', card: '#0D0D0D' },
+};
 
 // react-native-draggable-flatlist@4.0.3 calls measureLayout against a ref the
 // New Architecture (newArchEnabled) no longer treats as a native node. Drag
@@ -187,9 +196,11 @@ export default function RootLayout() {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0D0D0D' }}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <Stack screenOptions={{ headerShown: false }} />
+        <ThemeProvider value={AppDarkTheme}>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0D0D0D' } }} />
+        </ThemeProvider>
         <SyncIndicator />
         <ToastHost />
         <StatusBar style="light" />

@@ -32,6 +32,7 @@ import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
 import { glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
+import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -261,6 +262,7 @@ export default function Revenue() {
   };
 
   return (
+    <SwipeBetweenTabs name="revenue">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>REVENUE</Text>
@@ -509,6 +511,7 @@ export default function Revenue() {
         </KeyboardAvoidingView>
       </Modal>
     </View>
+    </SwipeBetweenTabs>
   );
 }
 

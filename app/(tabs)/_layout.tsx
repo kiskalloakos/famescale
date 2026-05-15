@@ -38,6 +38,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         animation: 'none',
+        sceneStyle: { backgroundColor: '#0D0D0D' },
         tabBarStyle: {
           backgroundColor: '#0D0D0D',
           borderTopColor: '#1C1C1C',

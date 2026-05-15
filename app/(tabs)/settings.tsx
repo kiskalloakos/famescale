@@ -22,6 +22,7 @@ import {
 } from '../../lib/currency';
 import { supabase } from '../../lib/supabase';
 import { glowGreen } from '../../lib/glows';
+import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei', name: 'Romanian Leu' },
@@ -116,6 +117,7 @@ export default function Settings() {
   const selectedCurrency = CURRENCIES.find((c) => c.code === currency);
 
   return (
+    <SwipeBetweenTabs name="settings">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>SETTINGS</Text>
@@ -401,6 +403,7 @@ export default function Settings() {
       </Modal>
 
     </View>
+    </SwipeBetweenTabs>
   );
 }
 

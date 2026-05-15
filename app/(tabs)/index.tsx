@@ -36,6 +36,7 @@ import StatementSheet from '../../components/StatementSheet';
 import { useDragReorder } from '../../lib/useDragReorder';
 import DraggableRow from '../../components/DraggableRow';
 import SortableScroll from '../../components/SortableScroll';
+import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 import { NestableDraggableFlatList, RenderItemParams } from 'react-native-draggable-flatlist';
 
 const MONTH_NAMES = [
@@ -497,6 +498,7 @@ export default function Dashboard() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+    <SwipeBetweenTabs name="index">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>DASHBOARD</Text>
@@ -1120,6 +1122,7 @@ export default function Dashboard() {
         />
       )}
     </View>
+    </SwipeBetweenTabs>
   );
 }
 

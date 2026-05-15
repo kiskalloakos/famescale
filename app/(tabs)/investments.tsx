@@ -22,6 +22,7 @@ import {
   saveInvestments,
 } from '../../lib/investments';
 import { feedback } from '../../lib/feedback';
+import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -135,6 +136,7 @@ export default function Investments() {
   };
 
   return (
+    <SwipeBetweenTabs name="investments">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={s.header}>
           <Text style={s.headerTitle}>INVESTMENTS</Text>
@@ -323,6 +325,7 @@ export default function Investments() {
         </KeyboardAvoidingView>
       </Modal>
     </View>
+    </SwipeBetweenTabs>
   );
 }
 

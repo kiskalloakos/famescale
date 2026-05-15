@@ -11,6 +11,7 @@ import { getDebts, peekDebts, refreshDebts } from '../../lib/debts';
 import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup, subscribeSetup } from '../../lib/setup';
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
+import SwipeBetweenTabs from '../../components/SwipeBetweenTabs';
 
 const CURRENCIES = [
   { code: 'RON', symbol: 'lei ' },
@@ -102,6 +103,7 @@ export default function NetWorth() {
   };
 
   return (
+    <SwipeBetweenTabs name="net-worth">
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={s.header}>
         <Text style={s.headerTitle}>NET WORTH</Text>
@@ -185,6 +187,7 @@ export default function NetWorth() {
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
+    </SwipeBetweenTabs>
   );
 }
 
