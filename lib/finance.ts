@@ -39,19 +39,22 @@ export interface NetWorthBreakdown {
   investedTotal: number;
   netWorth: number;
 }
+// `assets` (manually-tracked house/car/valuables) always counts toward net
+// worth — no gating. Defaulted/last so existing call sites stay valid.
 export function computeNetWorth(
   cash: number,
   invested: number,
   saved: number,
   debts: number,
   setup: NetWorthSetup | null,
+  assets = 0,
 ): NetWorthBreakdown {
   const investmentsEnabled = setup?.showInvestments !== false;
   const savingsEnabled = setup?.showSavings === true;
   const debtsEnabled = setup?.showDebts !== false;
   const debtsCountInTotal = debtsEnabled && setup?.includeDebtsInNetWorth !== false;
   const investedTotal = (investmentsEnabled ? invested : 0) + (savingsEnabled ? saved : 0);
-  const netWorth = cash + investedTotal - (debtsCountInTotal ? debts : 0);
+  const netWorth = cash + investedTotal + assets - (debtsCountInTotal ? debts : 0);
   return { investmentsEnabled, savingsEnabled, debtsEnabled, debtsCountInTotal, investedTotal, netWorth };
 }
 

@@ -1,15 +1,35 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Pressable,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrency, peekCurrencySettings, refreshCurrency } from '../../lib/currency';
 import { CURRENCIES } from '../../lib/currencies';
-import { getDashboard, peekDashboard, refreshDashboard } from '../../lib/dashboard';
+import { getDashboard, peekDashboard, refreshDashboard, newId } from '../../lib/dashboard';
 import { getInvestments, peekInvestments, refreshInvestments } from '../../lib/investments';
 import { getSavings, peekSavings, refreshSavings } from '../../lib/savings';
 import { getDebts, peekDebts, refreshDebts } from '../../lib/debts';
+import {
+  Asset,
+  getAssets,
+  peekAssets,
+  refreshAssets,
+  saveAsset,
+  deleteAsset,
+} from '../../lib/assets';
 import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup, subscribeSetup } from '../../lib/setup';
+import { showToast } from '../../lib/toast';
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { computeNetWorth } from '../../lib/finance';
@@ -35,6 +55,7 @@ export default function NetWorth() {
   const [debts, setDebts] = useState(() =>
     peekDebts().reduce((s, d) => s + parseAmt(d.amount), 0),
   );
+  const [assets, setAssets] = useState<Asset[]>(peekAssets);
   const [currency, setCurrency] = useState(() => peekCurrencySettings().global);
   const [setup, setSetup] = useState<SetupData | null>(peekSetup);
 
@@ -66,6 +87,8 @@ export default function NetWorth() {
       refreshSavings().then(applySavings);
       getDebts().then(applyDebts);
       refreshDebts().then(applyDebts);
+      getAssets().then((a) => !cancelled && setAssets(a));
+      refreshAssets().then((a) => !cancelled && setAssets(a));
       getCurrency().then((c) => !cancelled && setCurrency(c));
       refreshCurrency().then((c) => !cancelled && setCurrency(c));
       getSetup().then((s) => !cancelled && s && setSetup(s));
@@ -79,6 +102,7 @@ export default function NetWorth() {
   );
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
+  const assetsTotal = assets.reduce((sum, a) => sum + parseAmt(a.amount), 0);
   const {
     investmentsEnabled,
     savingsEnabled,
@@ -86,7 +110,67 @@ export default function NetWorth() {
     debtsCountInTotal,
     investedTotal,
     netWorth,
-  } = computeNetWorth(cash, invested, saved, debts, setup);
+  } = computeNetWorth(cash, invested, saved, debts, setup, assetsTotal);
+
+  // ── Assets: add / edit / delete ───────────────────────────────────────────
+  const [assetModal, setAssetModal] = useState<{ visible: boolean; editing: Asset | null }>({
+    visible: false,
+    editing: null,
+  });
+  const [formName, setFormName] = useState('');
+  const [formAmount, setFormAmount] = useState('');
+  const [formEmoji, setFormEmoji] = useState('');
+
+  const openAddAsset = () => {
+    setFormName('');
+    setFormAmount('');
+    setFormEmoji('');
+    feedback.tap();
+    setAssetModal({ visible: true, editing: null });
+  };
+
+  const openEditAsset = (asset: Asset) => {
+    setFormName(asset.name);
+    setFormAmount(asset.amount);
+    setFormEmoji(asset.emoji ?? '');
+    feedback.tap();
+    setAssetModal({ visible: true, editing: asset });
+  };
+
+  const saveAssetForm = async () => {
+    if (!formName.trim()) return;
+    const editing = assetModal.editing;
+    const emoji = formEmoji.trim() || null;
+    const asset: Asset = editing
+      ? { ...editing, name: formName.trim(), amount: formAmount, emoji }
+      : {
+          id: newId(),
+          name: formName.trim(),
+          amount: formAmount,
+          emoji,
+          position: assets.length,
+        };
+    setAssets(
+      editing ? assets.map((a) => (a.id === editing.id ? asset : a)) : [...assets, asset],
+    );
+    setAssetModal({ visible: false, editing: null });
+    feedback.success();
+    await saveAsset(asset);
+  };
+
+  const removeAssetForm = async (asset: Asset) => {
+    setAssetModal({ visible: false, editing: null });
+    setAssets((prev) => prev.filter((a) => a.id !== asset.id));
+    feedback.destroy();
+    await deleteAsset(asset.id);
+    showToast(`Deleted ${asset.name}`, {
+      label: 'Undo',
+      onPress: async () => {
+        setAssets((prev) => [...prev, asset]);
+        await saveAsset(asset);
+      },
+    });
+  };
 
   const toggleDebtsInNetWorth = async () => {
     if (!setup) return;
@@ -139,6 +223,16 @@ export default function NetWorth() {
             </View>
           )}
 
+          {assets.length > 0 && (
+            <View style={[s.line, s.lineBordered]}>
+              <View style={s.lineLeft}>
+                <Ionicons name="home-outline" size={16} color="#00C896" style={glowGreen} />
+                <Text style={s.lineLabel}>Assets</Text>
+              </View>
+              <Text style={s.linePos}>{fmt(assetsTotal, symbol)}</Text>
+            </View>
+          )}
+
           {debtsEnabled && (
             <View style={[s.line, s.lineBordered]}>
               <View style={s.lineLeft}>
@@ -170,12 +264,110 @@ export default function NetWorth() {
 
         </View>
 
+        {/* Assets — the one thing you manage here (house, car, valuables) */}
+        <View style={s.assetCard}>
+          <View style={s.assetHeader}>
+            <Text style={s.breakdownTitle2}>Assets</Text>
+            <TouchableOpacity style={s.assetAddBtn} onPress={openAddAsset}>
+              <Ionicons name="add" size={20} color="#00C896" style={glowGreen} />
+            </TouchableOpacity>
+          </View>
+          {assets.length === 0 ? (
+            <TouchableOpacity style={s.assetEmpty} onPress={openAddAsset}>
+              <Ionicons name="home-outline" size={24} color="#333" />
+              <Text style={s.assetEmptyText}>Add a house, car, or anything you own</Text>
+            </TouchableOpacity>
+          ) : (
+            assets.map((a, i) => (
+              <Pressable
+                key={a.id}
+                onPress={() => openEditAsset(a)}
+                style={[s.assetRow, i > 0 && s.lineBordered]}
+              >
+                <View style={s.assetRowLeft}>
+                  <Text style={s.assetEmoji}>{a.emoji || '📦'}</Text>
+                  <Text style={s.assetName}>{a.name}</Text>
+                </View>
+                <Text style={s.assetAmount}>{fmt(parseAmt(a.amount), symbol)}</Text>
+              </Pressable>
+            ))
+          )}
+        </View>
+
         <Text style={s.footnote}>
           Aggregated from the data you already track. Numbers refresh whenever you open this tab.
         </Text>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <Modal visible={assetModal.visible} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={s.overlay}>
+            <View style={s.sheet}>
+              <Text style={s.sheetTitle}>
+                {assetModal.editing ? 'Edit Asset' : 'Add Asset'}
+              </Text>
+              <View style={s.row2col}>
+                <View style={{ width: 80 }}>
+                  <Text style={s.inputLabel}>Icon</Text>
+                  <TextInput
+                    style={s.input}
+                    value={formEmoji}
+                    onChangeText={setFormEmoji}
+                    placeholder="🏠"
+                    placeholderTextColor="#444"
+                    maxLength={4}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.inputLabel}>Name</Text>
+                  <TextInput
+                    style={s.input}
+                    value={formName}
+                    onChangeText={setFormName}
+                    placeholder="e.g. House"
+                    placeholderTextColor="#444"
+                    autoFocus
+                  />
+                </View>
+              </View>
+              <Text style={s.inputLabel}>Value ({currency})</Text>
+              <TextInput
+                style={s.input}
+                value={formAmount}
+                onChangeText={setFormAmount}
+                placeholder="0.00"
+                placeholderTextColor="#444"
+                keyboardType="decimal-pad"
+              />
+              <View style={s.sheetActions}>
+                <TouchableOpacity
+                  style={s.btnCancel}
+                  onPress={() => setAssetModal({ visible: false, editing: null })}
+                >
+                  <Text style={s.btnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.btnSave} onPress={saveAssetForm}>
+                  <Text style={s.btnSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+              {assetModal.editing && (
+                <TouchableOpacity
+                  style={s.deleteLink}
+                  onPress={() => removeAssetForm(assetModal.editing!)}
+                >
+                  <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+                  <Text style={s.deleteLinkText}>Delete asset</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -258,4 +450,115 @@ const s = StyleSheet.create({
   eyeBtn: { padding: 4, marginLeft: 4 },
 
   footnote: { fontSize: 12, color: '#444', textAlign: 'center', marginTop: 4, lineHeight: 18, fontWeight: '500' },
+
+  // Assets card
+  assetCard: {
+    backgroundColor: '#151515',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#222',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  assetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 18,
+    paddingBottom: 12,
+  },
+  breakdownTitle2: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
+  assetAddBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#161616',
+    borderWidth: 1,
+    borderColor: '#1F3A30',
+  },
+  assetEmpty: { alignItems: 'center', paddingVertical: 32, gap: 8, paddingHorizontal: 24 },
+  assetEmptyText: { fontSize: 13, color: '#555', textAlign: 'center', fontWeight: '500' },
+  assetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  assetRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  assetEmoji: { fontSize: 20 },
+  assetName: { fontSize: 15, fontWeight: '600', color: '#EEE' },
+  assetAmount: { fontSize: 15, fontWeight: '700', color: '#FFF', fontVariant: ['tabular-nums'] },
+
+  // Add / edit asset sheet
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 44,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: '#2C2C2C',
+    maxHeight: '85%',
+  },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', letterSpacing: -0.3, marginBottom: 16 },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#222',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#FFF',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+    fontWeight: '500',
+  },
+  row2col: { flexDirection: 'row', gap: 12 },
+  sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  btnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#222',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  btnCancelText: { fontSize: 15, color: '#666', fontWeight: '500' },
+  btnSave: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#00C896',
+    alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#00C896',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  btnSaveText: { fontSize: 15, color: '#000', fontWeight: '700' },
+  deleteLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  deleteLinkText: { fontSize: 13, color: '#FF6B6B', fontWeight: '500' },
 });

@@ -117,6 +117,25 @@ describe('computeNetWorth — roll-up with load-bearing boolean defaults', () =>
   it('net worth can go negative', () => {
     expect(computeNetWorth(100, 0, 0, 900, null).netWorth).toBe(-800);
   });
+
+  it('assets default to 0 — omitting the arg is unchanged', () => {
+    expect(computeNetWorth(1000, 500, 0, 200, null).netWorth).toBe(1300);
+  });
+
+  it('assets always add to net worth (no gating)', () => {
+    expect(computeNetWorth(1000, 0, 0, 0, null, 50000).netWorth).toBe(51000);
+    // counted even when other tabs are off
+    expect(
+      computeNetWorth(0, 0, 0, 0, { showInvestments: false, showDebts: false }, 250000)
+        .netWorth,
+    ).toBe(250000);
+  });
+
+  it('assets combine with the rest: cash + invested + assets − debts', () => {
+    expect(computeNetWorth(1000, 500, 0, 200, null, 30000).netWorth).toBe(
+      1000 + 500 + 30000 - 200,
+    );
+  });
 });
 
 describe('resetStaleCosts — monthly un-pay of last month’s costs', () => {

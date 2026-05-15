@@ -29,7 +29,8 @@ select
   coalesce(t.rowsecurity, false)     as rls_enabled
 from (values
   ('accounts'),('costs'),('debts'),('investment_setup'),
-  ('savings_setup'),('user_settings'),('revenue_entries'),('transactions')
+  ('savings_setup'),('user_settings'),('revenue_entries'),('transactions'),
+  ('assets')
 ) as e(tbl)
 left join pg_tables t
   on t.schemaname = 'public' and t.tablename = e.tbl
@@ -47,6 +48,6 @@ from pg_policies
 where schemaname = 'public'
   and tablename in (
     'accounts','costs','debts','investment_setup',
-    'savings_setup','user_settings','revenue_entries','transactions'
+    'savings_setup','user_settings','revenue_entries','transactions','assets'
   )
 order by tablename, policyname;
