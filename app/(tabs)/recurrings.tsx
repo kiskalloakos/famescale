@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { CURRENCIES } from '../../lib/currencies';
 import {
   getCurrencyForPage,
@@ -58,6 +59,7 @@ export default function Recurrings() {
   const insets = useSafeAreaInsets();
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
+  const [trackW, setTrackW] = useState(0);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
 
   useFocusEffect(
@@ -246,8 +248,18 @@ export default function Recurrings() {
               <Text style={[s.heroPaid, glowGreen]}>{fmt(paid, symbol)}</Text>
             </View>
           </View>
-          <View style={s.barTrack}>
-            <View style={[s.barFill, { width: `${pct * 100}%` }]} />
+          <View
+            style={s.barTrack}
+            onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
+          >
+            <View style={[s.barClip, { width: `${pct * 100}%` }]}>
+              <LinearGradient
+                colors={['#FFA94D', '#00C896']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ width: trackW || '100%', height: 6 }}
+              />
+            </View>
           </View>
           <Text style={s.heroSub}>
             {fmt(total, symbol)} total · {costs.length}{' '}
@@ -446,7 +458,7 @@ const s = StyleSheet.create({
     marginTop: 18,
     overflow: 'hidden',
   },
-  barFill: { height: 6, borderRadius: 3, backgroundColor: '#00C896' },
+  barClip: { height: 6, borderRadius: 3, overflow: 'hidden' },
   heroSub: { fontSize: 12, color: '#666', marginTop: 10 },
 
   card: { ...surface, borderRadius: 20, overflow: 'hidden' },
