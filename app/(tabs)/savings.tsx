@@ -48,6 +48,7 @@ export default function Savings() {
   const [formYear, setFormYear] = useState('');
   const [formReturn, setFormReturn] = useState('');
   const [formShowProjections, setFormShowProjections] = useState(false);
+  const [formContributeMonthly, setFormContributeMonthly] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -75,7 +76,8 @@ export default function Savings() {
   const sy = parseInt(data.startYear) || new Date().getFullYear();
   const sm = parseInt(data.startMonth) || 1;
   const months = monthsSinceStart(sy, sm);
-  const pmt = pv > 0 ? pv / months : 0;
+  // No assumed future contributions in lump-sum mode — compound pv only.
+  const pmt = data.contributeMonthly && pv > 0 ? pv / months : 0;
   const rate = parseFloat(data.annualReturn) || 0;
 
   const val1y = fv(pv, pmt, rate, 12);
@@ -97,6 +99,7 @@ export default function Savings() {
     setFormYear(data.startYear);
     setFormReturn(data.annualReturn);
     setFormShowProjections(data.showProjections);
+    setFormContributeMonthly(data.contributeMonthly);
     feedback.tap();
     setEditVisible(true);
   };
@@ -108,6 +111,7 @@ export default function Savings() {
       startYear: formYear || String(new Date().getFullYear()),
       annualReturn: formReturn || '5',
       showProjections: formShowProjections,
+      contributeMonthly: formContributeMonthly,
     };
     setData(next);
     feedback.success();
@@ -126,14 +130,27 @@ export default function Savings() {
             data.showProjections ? (
               <>
                 <View style={s.heroDivider} />
-                <View style={s.heroRow}>
-                  <Text style={s.heroSubLabel}>Avg monthly</Text>
-                  <Text style={s.heroSubValue}>{fmtFull(pmt, symbol)}</Text>
-                </View>
-                <View style={[s.heroRow, { marginTop: 6 }]}>
-                  <Text style={s.heroSubLabel}>Since {startLabel} · {data.annualReturn || '5'}%</Text>
-                  <Text style={s.heroSubMeta}>tap to edit</Text>
-                </View>
+                {data.contributeMonthly ? (
+                  <>
+                    <View style={s.heroRow}>
+                      <Text style={s.heroSubLabel}>Avg monthly</Text>
+                      <Text style={s.heroSubValue}>{fmtFull(pmt, symbol)}</Text>
+                    </View>
+                    <View style={[s.heroRow, { marginTop: 6 }]}>
+                      <Text style={s.heroSubLabel}>
+                        Since {startLabel} · {data.annualReturn || '5'}%
+                      </Text>
+                      <Text style={s.heroSubMeta}>tap to edit</Text>
+                    </View>
+                  </>
+                ) : (
+                  <View style={s.heroRow}>
+                    <Text style={s.heroSubLabel}>
+                      Lump sum · {data.annualReturn || '5'}% / yr
+                    </Text>
+                    <Text style={s.heroSubMeta}>tap to edit</Text>
+                  </View>
+                )}
               </>
             ) : (
               <Text style={s.heroSubMetaCenter}>tap to edit</Text>
@@ -245,30 +262,57 @@ export default function Savings() {
 
                 {formShowProjections && (
                   <>
-                    <Text style={s.label}>STARTED SAVING</Text>
-                    <View style={s.monthGrid}>
-                      {MONTH_LABELS.map((m, i) => {
-                        const active = formMonth === String(i + 1);
-                        return (
-                          <TouchableOpacity
-                            key={m}
-                            style={[s.monthBtn, active && s.monthBtnActive]}
-                            onPress={() => setFormMonth(String(i + 1))}
-                          >
-                            <Text style={[s.monthBtnText, active && s.monthBtnTextActive]}>{m}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                    <TextInput
-                      style={[s.input, { marginTop: 10 }]}
-                      value={formYear}
-                      onChangeText={setFormYear}
-                      placeholder="2025"
-                      placeholderTextColor="#3A3A3A"
-                      keyboardType="number-pad"
-                      maxLength={4}
-                    />
+                    <TouchableOpacity
+                      style={s.toggleRow}
+                      onPress={() => {
+                        feedback.select();
+                        setFormContributeMonthly(!formContributeMonthly);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.toggleTitle}>I add to this monthly</Text>
+                        <Text style={s.toggleHint}>
+                          {formContributeMonthly
+                            ? 'Projects your current pace forward, based on when you started'
+                            : 'Lump sum — projects the current amount with no new deposits'}
+                        </Text>
+                      </View>
+                      <View style={[s.switch, formContributeMonthly && s.switchOn]}>
+                        <View style={[s.switchKnob, formContributeMonthly && s.switchKnobOn]} />
+                      </View>
+                    </TouchableOpacity>
+
+                    {formContributeMonthly && (
+                      <>
+                        <Text style={s.label}>STARTED SAVING</Text>
+                        <View style={s.monthGrid}>
+                          {MONTH_LABELS.map((m, i) => {
+                            const active = formMonth === String(i + 1);
+                            return (
+                              <TouchableOpacity
+                                key={m}
+                                style={[s.monthBtn, active && s.monthBtnActive]}
+                                onPress={() => setFormMonth(String(i + 1))}
+                              >
+                                <Text style={[s.monthBtnText, active && s.monthBtnTextActive]}>
+                                  {m}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        <TextInput
+                          style={[s.input, { marginTop: 10 }]}
+                          value={formYear}
+                          onChangeText={setFormYear}
+                          placeholder="2025"
+                          placeholderTextColor="#3A3A3A"
+                          keyboardType="number-pad"
+                          maxLength={4}
+                        />
+                      </>
+                    )}
 
                     <Text style={s.label}>EXPECTED ANNUAL RETURN (%)</Text>
                     <TextInput

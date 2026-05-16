@@ -8,6 +8,9 @@ export interface InvestmentData {
   startYear: string;
   annualReturn: string;
   showProjections: boolean;
+  /** When false, projections compound the current amount with no future
+   *  monthly contributions (lump-sum case). Default true. */
+  contributeMonthly: boolean;
 }
 
 const NS = 'investments';
@@ -18,6 +21,7 @@ const DEFAULT: InvestmentData = {
   startYear: String(new Date().getFullYear()),
   annualReturn: '7',
   showProjections: false,
+  contributeMonthly: true,
 };
 
 export function peekInvestments(): InvestmentData {
@@ -33,7 +37,9 @@ export async function refreshInvestments(): Promise<InvestmentData> {
   if (!uid) return getInvestments();
   const { data, error } = await supabase
     .from('investment_setup')
-    .select('total_invested, start_month, start_year, annual_return, show_projections')
+    .select(
+      'total_invested, start_month, start_year, annual_return, show_projections, contribute_monthly',
+    )
     .eq('user_id', uid)
     .maybeSingle();
   if (error || !data) return getInvestments();
@@ -43,6 +49,7 @@ export async function refreshInvestments(): Promise<InvestmentData> {
     startYear: String(data.start_year),
     annualReturn: String(data.annual_return),
     showProjections: data.show_projections ?? false,
+    contributeMonthly: data.contribute_monthly ?? true,
   };
   await save(NS, result);
   return result;
@@ -63,6 +70,7 @@ export async function saveInvestments(d: InvestmentData): Promise<void> {
           start_year: parseInt(d.startYear) || new Date().getFullYear(),
           annual_return: parseFloat(d.annualReturn) || 7,
           show_projections: d.showProjections,
+          contribute_monthly: d.contributeMonthly,
         },
         { onConflict: 'user_id' },
       ),
