@@ -13,13 +13,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
 import { surface } from '../../lib/surface';
 import { CURRENCIES } from '../../lib/currencies';
 import { Debt, getDebts, peekDebts, refreshDebts, saveDebt, deleteDebt } from '../../lib/debts';
 import { newId } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
-import { glowAmber } from '../../lib/glows';
+import { glowAmber, glowGreen } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { useDragReorder } from '../../lib/useDragReorder';
 import DraggableRow from '../../components/DraggableRow';
@@ -47,6 +48,7 @@ export default function Debts() {
   });
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
+  const [formPaid, setFormPaid] = useState('');
   const [formNotes, setFormNotes] = useState('');
 
   useFocusEffect(
@@ -71,11 +73,20 @@ export default function Debts() {
   );
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
-  const total = debts.reduce((s, d) => s + parseAmt(d.amount), 0);
+  // What you still owe drives the hero; the original total is informational.
+  const stillOwed = debts.reduce(
+    (s, d) => s + Math.max(0, parseAmt(d.amount) - parseAmt(d.paidAmount)),
+    0,
+  );
+  const paidOff = debts.reduce(
+    (s, d) => s + Math.min(parseAmt(d.amount), parseAmt(d.paidAmount)),
+    0,
+  );
 
   const openAdd = () => {
     setFormName('');
     setFormAmount('');
+    setFormPaid('');
     setFormNotes('');
     feedback.tap();
     setModal({ visible: true, editing: null });
@@ -84,6 +95,7 @@ export default function Debts() {
   const openEdit = (debt: Debt) => {
     setFormName(debt.name);
     setFormAmount(debt.amount);
+    setFormPaid(debt.paidAmount === '0' ? '' : debt.paidAmount);
     setFormNotes(debt.notes ?? '');
     feedback.tap();
     setModal({ visible: true, editing: debt });
@@ -92,12 +104,20 @@ export default function Debts() {
   const saveForm = async () => {
     if (!formName.trim()) return;
     const editing = modal.editing;
+    const paid = String(parseAmt(formPaid));
     const debt: Debt = editing
-      ? { ...editing, name: formName.trim(), amount: formAmount, notes: formNotes.trim() || null }
+      ? {
+          ...editing,
+          name: formName.trim(),
+          amount: formAmount,
+          paidAmount: paid,
+          notes: formNotes.trim() || null,
+        }
       : {
           id: newId(),
           name: formName.trim(),
           amount: formAmount,
+          paidAmount: paid,
           notes: formNotes.trim() || null,
           position: debts.length,
         };
@@ -121,6 +141,57 @@ export default function Debts() {
 
   const debtDrag = useDragReorder(debts, reorderDebts);
 
+  // Shared inner content for a debt row (used by both the native draggable
+  // list and the web map). The amber→green bar spans the full track and is
+  // revealed by the pct-wide clip: scaling the gradient's end point by 1/pct
+  // shows colour slice [0, pct] of the full sweep without measuring width.
+  const rowContent = (debt: Debt) => {
+    const amt = parseAmt(debt.amount);
+    const paid = parseAmt(debt.paidAmount);
+    const pct = amt > 0 ? Math.min(1, Math.max(0, paid / amt)) : 0;
+    const cleared = amt > 0 && paid >= amt;
+    const remaining = Math.max(0, amt - paid);
+    return (
+      <>
+        <View style={{ flex: 1 }}>
+          <Text style={s.rowLabel}>{debt.name}</Text>
+          {debt.notes ? <Text style={s.rowMeta}>{debt.notes}</Text> : null}
+          {amt > 0 && (
+            <>
+              <View style={s.barTrack}>
+                <View style={[s.barClip, { width: `${pct * 100}%` }]}>
+                  <LinearGradient
+                    colors={['#FFA94D', '#00C896']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: pct > 0 ? 1 / pct : 1, y: 0 }}
+                    style={{ flex: 1 }}
+                  />
+                </View>
+              </View>
+              <Text style={s.progressText}>
+                {fmt(paid, symbol)}{' '}
+                <Text style={s.progressMuted}>of {fmt(amt, symbol)}</Text>
+              </Text>
+            </>
+          )}
+        </View>
+        <View style={s.rowRight}>
+          {cleared ? (
+            <Text style={[s.clearedTag, glowGreen]}>CLEARED</Text>
+          ) : (
+            <>
+              <Text style={s.rowValue}>{fmt(remaining, symbol)}</Text>
+              {amt > 0 && <Text style={s.rowPct}>{Math.round(pct * 100)}%</Text>}
+            </>
+          )}
+        </View>
+        {editMode && (
+          <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
+        )}
+      </>
+    );
+  };
+
   const renderDebtItem = useCallback(
     ({ item: debt, drag, isActive }: RenderItemParams<Debt>) => (
       <View style={[s.row, isActive && s.rowDragging]}>
@@ -131,17 +202,10 @@ export default function Debts() {
         )}
         <TouchableOpacity
           style={s.rowBody}
-          onPress={editMode ? () => openEdit(debt) : undefined}
-          activeOpacity={editMode ? 0.2 : 1}
+          onPress={() => openEdit(debt)}
+          activeOpacity={0.6}
         >
-          <View style={{ flex: 1 }}>
-            <Text style={s.rowLabel}>{debt.name}</Text>
-            {debt.notes ? <Text style={s.rowMeta}>{debt.notes}</Text> : null}
-          </View>
-          <Text style={s.rowValue}>{fmt(parseAmt(debt.amount), symbol)}</Text>
-          {editMode && (
-            <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
-          )}
+          {rowContent(debt)}
         </TouchableOpacity>
       </View>
     ),
@@ -167,15 +231,20 @@ export default function Debts() {
   return (
     <View style={[s.container, { paddingBottom: insets.bottom }]}>
       <SortableScroll contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        {/* Hero — total owed */}
+        {/* Hero — still owed, with paid-off progress */}
         <View style={s.heroCard}>
-          <Text style={s.heroLabel}>TOTAL OWED</Text>
-          <Text style={s.heroAmount}>{fmt(total, symbol)}</Text>
+          <Text style={s.heroLabel}>STILL OWED</Text>
+          <Text style={s.heroAmount}>{fmt(stillOwed, symbol)}</Text>
           {debts.length > 0 && (
             <>
               <View style={s.heroDivider} />
               <View style={s.heroRow}>
-                <Text style={s.heroSubLabel}>Across {debts.length} {debts.length === 1 ? 'debt' : 'debts'}</Text>
+                <Text style={s.heroSubLabel}>
+                  Across {debts.length} {debts.length === 1 ? 'debt' : 'debts'}
+                </Text>
+                {paidOff > 0 && (
+                  <Text style={[s.heroPaid, glowGreen]}>{fmt(paidOff, symbol)} paid off</Text>
+                )}
               </View>
             </>
           )}
@@ -221,17 +290,10 @@ export default function Debts() {
                       )}
                       <TouchableOpacity
                         style={s.rowBody}
-                        onPress={editMode ? () => openEdit(debt) : undefined}
-                        activeOpacity={editMode ? 0.2 : 1}
+                        onPress={() => openEdit(debt)}
+                        activeOpacity={0.6}
                       >
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.rowLabel}>{debt.name}</Text>
-                          {debt.notes ? <Text style={s.rowMeta}>{debt.notes}</Text> : null}
-                        </View>
-                        <Text style={s.rowValue}>{fmt(parseAmt(debt.amount), symbol)}</Text>
-                        {editMode && (
-                          <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
-                        )}
+                        {rowContent(debt)}
                       </TouchableOpacity>
                     </DraggableRow>
                   );
@@ -261,6 +323,11 @@ export default function Debts() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <View style={s.overlay}>
             <View style={s.sheet}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={s.sheetScroll}
+              >
               <Text style={s.sheetTitle}>{modal.editing ? 'Edit debt' : 'Add debt'}</Text>
               <Text style={s.inputLabel}>Who do you owe?</Text>
               <TextInput
@@ -276,6 +343,15 @@ export default function Debts() {
                 style={s.input}
                 value={formAmount}
                 onChangeText={setFormAmount}
+                placeholder="0.00"
+                placeholderTextColor="#444"
+                keyboardType="decimal-pad"
+              />
+              <Text style={s.inputLabel}>Paid so far (optional)</Text>
+              <TextInput
+                style={s.input}
+                value={formPaid}
+                onChangeText={setFormPaid}
                 placeholder="0.00"
                 placeholderTextColor="#444"
                 keyboardType="decimal-pad"
@@ -306,6 +382,7 @@ export default function Debts() {
                   <Text style={s.deleteLinkText}>Delete debt</Text>
                 </TouchableOpacity>
               )}
+              </ScrollView>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -360,6 +437,7 @@ const s = StyleSheet.create({
   heroDivider: { height: 1, backgroundColor: '#1E1E1E', marginVertical: 18 },
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroSubLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
+  heroPaid: { fontSize: 13, color: '#00C896', fontWeight: '600' },
 
   card: { ...surface, borderRadius: 16, marginBottom: 16, overflow: 'hidden' },
   cardHeader: {
@@ -397,6 +475,36 @@ const s = StyleSheet.create({
   rowDropTarget: { borderTopWidth: 2, borderTopColor: '#00C896' },
   rowLabel: { fontSize: 15, color: '#EEE', fontWeight: '500' },
   rowMeta: { fontSize: 11, color: '#555', marginTop: 2, fontWeight: '500' },
+  barTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1E1E1E',
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  barClip: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressText: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  progressMuted: { color: '#555', fontWeight: '500' },
+  rowRight: { alignItems: 'flex-end', marginLeft: 10, justifyContent: 'center' },
+  rowPct: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '600',
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  clearedTag: {
+    fontSize: 11,
+    color: '#00C896',
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
   rowValue: {
     fontSize: 14,
     color: '#FFA94D',
@@ -444,7 +552,11 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderBottomWidth: 0,
     borderColor: '#2C2C2C',
+    // Cap height so the sheet can't slide off the top when the keyboard
+    // shrinks the available area; overflow scrolls instead (see sheetScroll).
+    maxHeight: '90%',
   },
+  sheetScroll: { paddingBottom: 4 },
   sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', marginBottom: 16, letterSpacing: -0.3 },
   inputLabel: {
     fontSize: 11,

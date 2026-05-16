@@ -55,7 +55,10 @@ export default function NetWorth() {
   const [invested, setInvested] = useState(() => parseAmt(peekInvestments().totalInvested));
   const [saved, setSaved] = useState(() => parseAmt(peekSavings().totalInvested));
   const [debts, setDebts] = useState(() =>
-    peekDebts().reduce((s, d) => s + parseAmt(d.amount), 0),
+    peekDebts().reduce(
+      (s, d) => s + Math.max(0, parseAmt(d.amount) - parseAmt(d.paidAmount)),
+      0,
+    ),
   );
   const [assets, setAssets] = useState<Asset[]>(peekAssets);
   const [currency, setCurrency] = useState(() => peekCurrencySettings().global);
@@ -76,9 +79,14 @@ export default function NetWorth() {
         if (cancelled) return;
         setSaved(parseAmt(i.totalInvested));
       };
-      const applyDebts = (list: { amount: string }[]) => {
+      const applyDebts = (list: { amount: string; paidAmount?: string }[]) => {
         if (cancelled) return;
-        setDebts(list.reduce((s, d) => s + parseAmt(d.amount), 0));
+        setDebts(
+          list.reduce(
+            (s, d) => s + Math.max(0, parseAmt(d.amount) - parseAmt(d.paidAmount ?? '0')),
+            0,
+          ),
+        );
       };
 
       getDashboard().then(applyDashboard);

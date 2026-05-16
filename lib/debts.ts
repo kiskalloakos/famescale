@@ -6,6 +6,8 @@ export interface Debt {
   id: string;
   name: string;
   amount: string;
+  /** Manually-tracked amount paid off so far, of `amount`. */
+  paidAmount: string;
   notes?: string | null;
   position: number;
 }
@@ -25,7 +27,7 @@ export async function refreshDebts(): Promise<Debt[]> {
   if (!uid) return getDebts();
   const { data, error } = await supabase
     .from('debts')
-    .select('id, name, amount, notes, position')
+    .select('id, name, amount, paid_amount, notes, position')
     .eq('user_id', uid)
     .order('position', { ascending: true });
   if (error) return getDebts();
@@ -33,6 +35,7 @@ export async function refreshDebts(): Promise<Debt[]> {
     id: r.id,
     name: r.name,
     amount: String(r.amount),
+    paidAmount: String(r.paid_amount ?? 0),
     notes: r.notes,
     position: r.position,
   }));
@@ -55,6 +58,7 @@ export async function saveDebt(debt: Debt): Promise<void> {
       user_id: uid,
       name: debt.name,
       amount: parseFloat(debt.amount) || 0,
+      paid_amount: parseFloat(debt.paidAmount) || 0,
       notes: debt.notes ?? null,
       position: debt.position,
     }),
