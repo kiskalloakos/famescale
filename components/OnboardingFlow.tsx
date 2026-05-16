@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { saveSetup } from '../lib/setup';
+import { saveSetup, ORDERABLE_TABS } from '../lib/setup';
 import { saveGlobalCurrency } from '../lib/currency';
 import { glowGreen } from '../lib/glows';
 
@@ -99,6 +99,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
       showNetWorth: tracks.showNetWorth,
       showGoals: tracks.showGoals,
       includeDebtsInNetWorth: true,
+      tabOrder: [...ORDERABLE_TABS],
     });
     onComplete();
   };

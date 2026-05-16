@@ -7,7 +7,7 @@ import {
   type MaterialTopTabBarProps,
 } from '@react-navigation/material-top-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SetupData, getSetup, peekSetup, refreshSetup, subscribeSetup } from '../../lib/setup';
+import { SetupData, getSetup, peekSetup, refreshSetup, subscribeSetup, ORDERABLE_TABS, normalizeTabOrder } from '../../lib/setup';
 
 // react-native-pager-view under the hood → real finger-tracked paging.
 // The `true` 3rd arg makes the declared <Screen> children the definitive
@@ -26,6 +26,7 @@ const DEFAULT_SETUP: SetupData = {
   showRecurrings: false,
   showGoals: false,
   includeDebtsInNetWorth: true,
+  tabOrder: [...ORDERABLE_TABS],
 };
 
 // Tab bar order. `always` tabs ignore setup; the rest mirror the old
@@ -240,14 +241,23 @@ export default function TabLayout() {
     };
   }, []);
 
-  const visible = useMemo(() => TABS.filter((t) => t.visible(setup)), [setup]);
+  // Dashboard + Recurrings are pinned first, Settings last; only the
+  // optional tabs in between are user-orderable (setup.tabOrder).
+  const visible = useMemo(() => {
+    const byName = (n: string) => TABS.find((t) => t.name === n)!;
+    const order = normalizeTabOrder(setup.tabOrder);
+    const front = ['index', 'recurrings'].map(byName);
+    const middle = order.map(byName).filter((t) => t.visible(setup));
+    return [...front, ...middle, byName('settings')];
+  }, [setup]);
 
   // react-native-tab-view's pager view desyncs from navigation state when the
-  // route array length changes at runtime (the toggle jitter / wrong-page /
-  // stale-state bugs). Keying the navigator on the visible set forces a clean
-  // remount on visibility change; expo-router is URL-driven so it re-derives
-  // the correct focused tab from the current path. Screens re-seed instantly
-  // from the peekX() cache. Visibility toggles are rare, so the remount cost
+  // route array changes at runtime — its length OR order (the toggle jitter /
+  // wrong-page / stale-state bugs). Keying the navigator on the ordered
+  // visible set forces a clean remount on any visibility OR reorder change;
+  // expo-router is URL-driven so it re-derives the correct focused tab from
+  // the current path. Screens re-seed instantly from the peekX() cache. Both
+  // toggling and reordering are rare, deliberate actions, so the remount cost
   // is acceptable in exchange for zero pager desync.
   const navKey = visible.map((t) => t.name).join('|');
 

@@ -11,7 +11,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { SetupData, getSetup, peekSetup, refreshSetup, saveSetup } from '../../lib/setup';
+import {
+  SetupData,
+  getSetup,
+  peekSetup,
+  refreshSetup,
+  saveSetup,
+  normalizeTabOrder,
+} from '../../lib/setup';
 import {
   PageKey,
   getCurrencySettings,
@@ -25,6 +32,16 @@ import { supabase } from '../../lib/supabase';
 import { glowGreen } from '../../lib/glows';
 import { CURRENCIES } from '../../lib/currencies';
 
+// Display titles for the orderable (optional) tabs — keyed by route name.
+const TAB_TITLES: Record<string, string> = {
+  investments: 'Investments',
+  savings: 'Savings',
+  revenue: 'Revenue',
+  debts: 'Debts',
+  'net-worth': 'Net Worth',
+  goals: 'Goals',
+};
+
 export default function Settings() {
   const insets = useSafeAreaInsets();
   const [currency, setCurrency] = useState(() => peekCurrencySettings().global);
@@ -35,6 +52,7 @@ export default function Settings() {
   const [email, setEmail] = useState<string | null>(null);
 
   const [currencyModal, setCurrencyModal] = useState(false);
+  const [orderModal, setOrderModal] = useState(false);
   const [perPage, setPerPage] = useState<{ visible: boolean; view: 'list' | 'picker'; page: PageKey | null }>({
     visible: false,
     view: 'list',
@@ -96,6 +114,21 @@ export default function Settings() {
   ) => {
     if (!setup) return;
     const next: SetupData = { ...setup, [key]: !setup[key] };
+    setSetup(next);
+    await saveSetup(next);
+  };
+
+  // Move an optional tab up/down within tabOrder. Arrow-based (not drag):
+  // react-native-draggable-flatlist inside a RN Modal is gesture-fragile,
+  // and reordering is a rare, deliberate action where nudging is reliable
+  // on every platform. The tab bar reorders live (it subscribes to setup).
+  const moveTab = async (index: number, dir: -1 | 1) => {
+    if (!setup) return;
+    const order = normalizeTabOrder(setup.tabOrder);
+    const j = index + dir;
+    if (j < 0 || j >= order.length) return;
+    [order[index], order[j]] = [order[j], order[index]];
+    const next: SetupData = { ...setup, tabOrder: order };
     setSetup(next);
     await saveSetup(next);
   };
@@ -245,6 +278,15 @@ export default function Settings() {
                   );
                 });
               })()}
+              <TouchableOpacity
+                style={[s.tabRow, { borderTopWidth: 1, borderTopColor: '#1C1C1C' }]}
+                onPress={() => setOrderModal(true)}
+                activeOpacity={0.75}
+              >
+                <View style={s.rowIcon} />
+                <Text style={[s.subtleLabel, { flex: 1 }]}>Customize order</Text>
+                <Ionicons name="chevron-forward" size={14} color="#333" />
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -404,6 +446,57 @@ export default function Settings() {
                 })}
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Tab order — Dashboard/Recurrings pinned first, Settings last */}
+      <Modal visible={orderModal} transparent animationType="slide">
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>Tab order</Text>
+            <Text style={s.sheetSub}>
+              Dashboard and Recurrings always come first; Settings is always
+              last. Reorder the rest below.
+            </Text>
+            {normalizeTabOrder(setup?.tabOrder).map((name, i, arr) => (
+              <View
+                key={name}
+                style={[s.pageRow, i > 0 && { borderTopWidth: 1, borderTopColor: '#222' }]}
+              >
+                <Text style={s.pageRowLabel}>{TAB_TITLES[name] ?? name}</Text>
+                <View style={s.orderBtns}>
+                  <TouchableOpacity
+                    style={s.orderBtn}
+                    disabled={i === 0}
+                    onPress={() => moveTab(i, -1)}
+                  >
+                    <Ionicons
+                      name="chevron-up"
+                      size={20}
+                      color={i === 0 ? '#2A2A2A' : '#888'}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.orderBtn}
+                    disabled={i === arr.length - 1}
+                    onPress={() => moveTab(i, 1)}
+                  >
+                    <Ionicons
+                      name="chevron-down"
+                      size={20}
+                      color={i === arr.length - 1 ? '#2A2A2A' : '#888'}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={[s.closeBtn, { marginTop: 16 }]}
+              onPress={() => setOrderModal(false)}
+            >
+              <Text style={s.closeBtnText}>Done</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -585,6 +678,14 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
   pageRowLabel: { flex: 1, fontSize: 15, color: '#EEE', fontWeight: '500' },
+  orderBtns: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  orderBtn: {
+    width: 40,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
   pageRowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pageRowValue: { fontSize: 14, color: '#888', fontWeight: '500' },
   pageRowOverride: {
