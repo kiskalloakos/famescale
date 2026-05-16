@@ -9,6 +9,7 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CURRENCIES } from '../../lib/currencies';
 import { getCurrency, peekCurrencySettings, refreshCurrency } from '../../lib/currency';
+import { surface } from '../../lib/surface';
 import { newId } from '../../lib/dashboard';
 import { Goal, getGoals, peekGoals, refreshGoals, saveGoal, deleteGoal } from '../../lib/goals';
 import { goalMonthlyPace } from '../../lib/finance';
@@ -23,6 +25,7 @@ import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen } from '../../lib/glows';
 import EmojiPicker, { GOAL_EMOJIS } from '../../components/EmojiPicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -31,6 +34,20 @@ function fmt(value: number, symbol: string): string {
 function parseAmt(s: string): number {
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
+}
+
+// 'YYYY-MM-DD' <-> Date, both in LOCAL time so the picked day can't drift
+// across a timezone boundary (matches monthsUntil's local parse).
+function parseYMD(iso?: string | null): Date {
+  if (iso) {
+    const d = new Date(iso + 'T00:00:00');
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
+function toYMD(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 // Whole months from now to a 'YYYY-MM-DD' deadline. Negative = past.
@@ -71,6 +88,13 @@ export default function Goals() {
   const [formTarget, setFormTarget] = useState('');
   const [formCurrent, setFormCurrent] = useState('');
   const [formDeadline, setFormDeadline] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
+
+  const onPickDate = (e: DateTimePickerEvent, d?: Date) => {
+    if (Platform.OS !== 'ios') setShowPicker(false);
+    if (e.type === 'dismissed' || !d) return;
+    setFormDeadline(toYMD(d));
+  };
 
   const openAdd = () => {
     setFormName('');
@@ -78,6 +102,7 @@ export default function Goals() {
     setFormTarget('');
     setFormCurrent('');
     setFormDeadline('');
+    setShowPicker(false);
     feedback.tap();
     setModal({ visible: true, editing: null });
   };
@@ -88,6 +113,7 @@ export default function Goals() {
     setFormTarget(g.targetAmount);
     setFormCurrent(g.currentAmount);
     setFormDeadline(g.deadline ?? '');
+    setShowPicker(false);
     feedback.tap();
     setModal({ visible: true, editing: g });
   };
@@ -248,16 +274,78 @@ export default function Goals() {
                   />
                 </View>
               </View>
-              <Text style={s.inputLabel}>Deadline — optional (YYYY-MM-DD)</Text>
-              <TextInput
-                style={s.input}
-                value={formDeadline}
-                onChangeText={setFormDeadline}
-                placeholder="2026-12-31"
-                placeholderTextColor="#444"
-                keyboardType="numbers-and-punctuation"
-                maxLength={10}
-              />
+              <Text style={s.inputLabel}>Deadline — optional</Text>
+              {Platform.OS === 'web' ? (
+                // @react-native-community/datetimepicker has no usable web
+                // render (degrades to a thin line). The browser's native
+                // date input speaks our exact 'YYYY-MM-DD' storage format,
+                // so no conversion is needed.
+                React.createElement('input', {
+                  type: 'date',
+                  value: formDeadline,
+                  onChange: (e: any) => setFormDeadline(e.target.value),
+                  style: {
+                    backgroundColor: '#222',
+                    borderRadius: 12,
+                    padding: 14,
+                    fontSize: 16,
+                    color: '#FFF',
+                    marginBottom: 20,
+                    border: '1px solid #2C2C2C',
+                    fontWeight: 500,
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    colorScheme: 'dark',
+                    outline: 'none',
+                  },
+                })
+              ) : (
+                <>
+                  <Pressable
+                    style={[s.input, s.dateField]}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowPicker((v) => !v);
+                    }}
+                  >
+                    <Text style={formDeadline ? s.dateText : s.datePlaceholder}>
+                      {formDeadline || 'No deadline'}
+                    </Text>
+                    {formDeadline ? (
+                      <Pressable
+                        hitSlop={10}
+                        onPress={() => {
+                          setFormDeadline('');
+                          setShowPicker(false);
+                        }}
+                      >
+                        <Ionicons name="close-circle" size={18} color="#666" />
+                      </Pressable>
+                    ) : (
+                      <Ionicons name="calendar-outline" size={16} color="#666" />
+                    )}
+                  </Pressable>
+                  {showPicker && (
+                    <View style={s.pickerWrap}>
+                      <DateTimePicker
+                        value={parseYMD(formDeadline)}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        themeVariant="dark"
+                        onChange={onPickDate}
+                      />
+                      {Platform.OS === 'ios' && (
+                        <TouchableOpacity
+                          style={s.pickerDone}
+                          onPress={() => setShowPicker(false)}
+                        >
+                          <Text style={s.pickerDoneText}>Done</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
               <View style={s.sheetActions}>
                 <TouchableOpacity
                   style={s.btnCancel}
@@ -309,14 +397,7 @@ const s = StyleSheet.create({
     borderColor: '#1F3A30',
   },
 
-  card: {
-    backgroundColor: '#121212',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#1E1E1E',
-    padding: 18,
-    marginBottom: 12,
-  },
+  card: { ...surface, borderRadius: 18, padding: 18, marginBottom: 12 },
   cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -383,6 +464,29 @@ const s = StyleSheet.create({
     borderColor: '#2C2C2C',
     fontWeight: '500',
   },
+  dateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 15,
+  },
+  dateText: { fontSize: 16, color: '#FFF', fontWeight: '500' },
+  datePlaceholder: { fontSize: 16, color: '#444', fontWeight: '500' },
+  pickerWrap: {
+    backgroundColor: '#161616',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+    marginTop: -8,
+    marginBottom: 20,
+    paddingBottom: 6,
+  },
+  pickerDone: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  pickerDoneText: { fontSize: 15, color: '#00C896', fontWeight: '700' },
   row2col: { flexDirection: 'row', gap: 12 },
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {

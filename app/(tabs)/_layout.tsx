@@ -6,6 +6,7 @@ import {
   createMaterialTopTabNavigator,
   type MaterialTopTabBarProps,
 } from '@react-navigation/material-top-tabs';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SetupData, getSetup, peekSetup, refreshSetup, subscribeSetup } from '../../lib/setup';
 
 // react-native-pager-view under the hood → real finger-tracked paging.
@@ -52,10 +53,16 @@ const TITLE_FOR: Record<string, string> = Object.fromEntries(
 
 const WEB = Platform.OS === 'web';
 
-// Fixed-width label slot. Sized for the longest label ("Investments" /
-// "Net Worth") so nothing truncates and spacing is even.
-const SLOT_W = 150;
-const PILL_W = SLOT_W - 18;
+// Fixed-width label slot. This single number is BOTH the inter-word
+// spacing AND the per-tab swipe distance (the strip translates by exactly
+// one SLOT_W per tab so the active label centers under the pill — no
+// measurement, see NativeBar). Floor ≈ width of the longest label
+// ("Investments") since text is clipped to the slot (numberOfLines=1);
+// going tighter than that needs content-width slots (a bigger change).
+const SLOT_W = 116;
+// Decoupled from SLOT_W so the pill stays wide enough to frame the
+// longest label with padding even though the slots are now snug.
+const PILL_W = 118;
 const PILL_H = 36;
 const DIM = 0.35;
 
@@ -75,9 +82,20 @@ function NativeBar({ state, navigation, position, layout }: MaterialTopTabBarPro
   return (
     <View style={[styles.bar, { paddingTop: insets.top + 10 }]}>
       <View style={[styles.track, { height: PILL_H }]}>
-        <View
+        <LinearGradient
+          colors={['#262626', '#1D1D1D', '#181818']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
           style={[styles.fixedPill, { width: PILL_W, left: w / 2 - PILL_W / 2 }]}
-        />
+        >
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(255,255,255,0.05)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={styles.pillSheen}
+          />
+        </LinearGradient>
         <Animated.View style={[styles.strip, { transform: [{ translateX }] }]}>
           {state.routes.map((route, i) => {
             const opacity = position.interpolate({
@@ -266,7 +284,26 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     borderRadius: 999,
-    backgroundColor: '#1C1C1C',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    // Soft depth shadow under the pill (Copilot's pill sits slightly raised).
+    shadowColor: '#000',
+    shadowOpacity: 0.45,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  // Top "lit from above" sheen — a light gradient fading to transparent
+  // over the upper portion of the pill. Bottom edge is fully transparent
+  // so its square corners never show against the rounded pill.
+  pillSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '40%',
+    borderTopLeftRadius: 999,
+    borderTopRightRadius: 999,
   },
   strip: {
     flexDirection: 'row',

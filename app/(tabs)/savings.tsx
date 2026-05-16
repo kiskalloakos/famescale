@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { surface } from '../../lib/surface';
 import { CURRENCIES } from '../../lib/currencies';
 import {
   SavingsData,
@@ -305,14 +306,7 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 3 },
   scroll: { paddingHorizontal: 16 },
 
-  heroCard: {
-    backgroundColor: '#151515',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#222',
-  },
+  heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
   heroLabel: {
     fontSize: 10,
     fontWeight: '600',
@@ -368,14 +362,7 @@ const s = StyleSheet.create({
     textShadowRadius: 8,
   },
 
-  card: {
-    backgroundColor: '#151515',
-    borderRadius: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#222',
-    overflow: 'hidden',
-  },
+  card: { ...surface, borderRadius: 16, marginBottom: 16, overflow: 'hidden' },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
   collapseHeader: {
     flexDirection: 'row',

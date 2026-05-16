@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrencyForPage, peekCurrencyForPage, refreshCurrencyForPage } from '../../lib/currency';
+import { surface } from '../../lib/surface';
 import { CURRENCIES } from '../../lib/currencies';
 import { Debt, getDebts, peekDebts, refreshDebts, saveDebt, deleteDebt } from '../../lib/debts';
 import { newId } from '../../lib/dashboard';
@@ -344,14 +345,7 @@ const s = StyleSheet.create({
   },
   scroll: { paddingHorizontal: 16 },
 
-  heroCard: {
-    backgroundColor: '#151515',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#222',
-  },
+  heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
   heroLabel: { fontSize: 10, fontWeight: '600', color: '#555', letterSpacing: 1.5, marginBottom: 10 },
   heroAmount: {
     fontSize: 40,
@@ -367,14 +361,7 @@ const s = StyleSheet.create({
   heroRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   heroSubLabel: { fontSize: 13, color: '#555', fontWeight: '500' },
 
-  card: {
-    backgroundColor: '#151515',
-    borderRadius: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#222',
-    overflow: 'hidden',
-  },
+  card: { ...surface, borderRadius: 16, marginBottom: 16, overflow: 'hidden' },
   cardHeader: {
     padding: 18,
     flexDirection: 'row',

@@ -21,6 +21,7 @@ import {
   peekCurrencyForPage,
   refreshCurrencyForPage,
 } from '../../lib/currency';
+import { surface } from '../../lib/surface';
 import {
   Account,
   Cost,
@@ -423,14 +424,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   scroll: { paddingHorizontal: 16, paddingTop: 6 },
 
-  heroCard: {
-    backgroundColor: '#121212',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#1E1E1E',
-    padding: 22,
-    marginBottom: 14,
-  },
+  heroCard: { ...surface, borderRadius: 20, padding: 22, marginBottom: 14 },
   heroRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -455,13 +449,7 @@ const s = StyleSheet.create({
   barFill: { height: 6, borderRadius: 3, backgroundColor: '#00C896' },
   heroSub: { fontSize: 12, color: '#666', marginTop: 10 },
 
-  card: {
-    backgroundColor: '#121212',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#1E1E1E',
-    overflow: 'hidden',
-  },
+  card: { ...surface, borderRadius: 20, overflow: 'hidden' },
   cardHeader: {
     padding: 18,
     flexDirection: 'row',

@@ -20,6 +20,7 @@ import {
   saveGlobalCurrency,
   saveOverrideCurrency,
 } from '../../lib/currency';
+import { surface } from '../../lib/surface';
 import { supabase } from '../../lib/supabase';
 import { glowGreen } from '../../lib/glows';
 import { CURRENCIES } from '../../lib/currencies';
@@ -461,14 +462,7 @@ const s = StyleSheet.create({
     marginLeft: 4,
   },
 
-  card: {
-    backgroundColor: '#151515',
-    borderRadius: 14,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#222',
-    overflow: 'hidden',
-  },
+  card: { ...surface, borderRadius: 14, marginBottom: 24, overflow: 'hidden' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
