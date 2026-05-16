@@ -33,6 +33,7 @@ import { showToast } from '../../lib/toast';
 import { glowGreen, glowAmber } from '../../lib/glows';
 import { feedback } from '../../lib/feedback';
 import { computeNetWorth } from '../../lib/finance';
+import EmojiPicker, { ASSET_EMOJIS } from '../../components/EmojiPicker';
 
 function fmt(value: number, symbol: string): string {
   const abs = Math.abs(value);
@@ -311,30 +312,20 @@ export default function NetWorth() {
               <Text style={s.sheetTitle}>
                 {assetModal.editing ? 'Edit Asset' : 'Add Asset'}
               </Text>
-              <View style={s.row2col}>
-                <View style={{ width: 80 }}>
-                  <Text style={s.inputLabel}>Icon</Text>
-                  <TextInput
-                    style={s.input}
-                    value={formEmoji}
-                    onChangeText={setFormEmoji}
-                    placeholder="🏠"
-                    placeholderTextColor="#444"
-                    maxLength={4}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.inputLabel}>Name</Text>
-                  <TextInput
-                    style={s.input}
-                    value={formName}
-                    onChangeText={setFormName}
-                    placeholder="e.g. House"
-                    placeholderTextColor="#444"
-                    autoFocus
-                  />
-                </View>
-              </View>
+              <EmojiPicker
+                value={formEmoji}
+                onChange={setFormEmoji}
+                options={ASSET_EMOJIS}
+              />
+              <Text style={s.inputLabel}>Name</Text>
+              <TextInput
+                style={s.input}
+                value={formName}
+                onChangeText={setFormName}
+                placeholder="e.g. House"
+                placeholderTextColor="#444"
+                autoFocus
+              />
               <Text style={s.inputLabel}>Value ({currency})</Text>
               <TextInput
                 style={s.input}
@@ -527,7 +518,6 @@ const s = StyleSheet.create({
     borderColor: '#2C2C2C',
     fontWeight: '500',
   },
-  row2col: { flexDirection: 'row', gap: 12 },
   sheetActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   btnCancel: {
     flex: 1,

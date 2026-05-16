@@ -22,6 +22,7 @@ import { goalMonthlyPace } from '../../lib/finance';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen } from '../../lib/glows';
+import EmojiPicker, { GOAL_EMOJIS } from '../../components/EmojiPicker';
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -209,30 +210,20 @@ export default function Goals() {
           <View style={s.overlay}>
             <View style={s.sheet}>
               <Text style={s.sheetTitle}>{modal.editing ? 'Edit Goal' : 'New Goal'}</Text>
-              <View style={s.row2col}>
-                <View style={{ width: 80 }}>
-                  <Text style={s.inputLabel}>Icon</Text>
-                  <TextInput
-                    style={s.input}
-                    value={formEmoji}
-                    onChangeText={setFormEmoji}
-                    placeholder="🎯"
-                    placeholderTextColor="#444"
-                    maxLength={4}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.inputLabel}>Name</Text>
-                  <TextInput
-                    style={s.input}
-                    value={formName}
-                    onChangeText={setFormName}
-                    placeholder="e.g. Emergency fund"
-                    placeholderTextColor="#444"
-                    autoFocus
-                  />
-                </View>
-              </View>
+              <EmojiPicker
+                value={formEmoji}
+                onChange={setFormEmoji}
+                options={GOAL_EMOJIS}
+              />
+              <Text style={s.inputLabel}>Name</Text>
+              <TextInput
+                style={s.input}
+                value={formName}
+                onChangeText={setFormName}
+                placeholder="e.g. Emergency fund"
+                placeholderTextColor="#444"
+                autoFocus
+              />
               <View style={s.row2col}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.inputLabel}>Target ({currency})</Text>
