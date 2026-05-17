@@ -46,8 +46,8 @@ export default function AuthScreen() {
       setError('Email and password are required.');
       return;
     }
-    if (mode === 'sign-up' && password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    if (mode === 'sign-up' && password.length < 10) {
+      setError('Password must be at least 10 characters.');
       return;
     }
 
@@ -134,7 +134,7 @@ export default function AuthScreen() {
                     style={s.input}
                     value={password}
                     onChangeText={setPassword}
-                    placeholder={mode === 'sign-up' ? 'At least 8 characters' : '••••••••'}
+                    placeholder={mode === 'sign-up' ? 'At least 10 characters' : '••••••••'}
                     placeholderTextColor="#3A3A3A"
                     secureTextEntry
                     autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}

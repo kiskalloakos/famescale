@@ -39,6 +39,29 @@ export async function logTransaction(args: {
   );
 }
 
+// Undo the most recent payment for a cost (un-ticking it). Rather than
+// inserting an offsetting `refund` row — which made repeated tick/untick
+// pile up mirror-image in/out entries in the statement — we delete the
+// original `cost` payment row, so toggling nets to zero ledger activity.
+// Only the latest matching row is removed, so earlier months' payments
+// (kept paid through the monthly auto-reset) stay in the history.
+export async function deleteLastCostTransaction(referenceId: string): Promise<void> {
+  const uid = await userId();
+  if (!uid) return;
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id')
+    .eq('user_id', uid)
+    .eq('reference_id', referenceId)
+    .eq('kind', 'cost')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return;
+  await reportable(
+    supabase.from('transactions').delete().eq('id', data[0].id).eq('user_id', uid),
+  );
+}
+
 export async function getTransactions(limit = 500): Promise<Transaction[]> {
   const uid = await userId();
   if (!uid) return [];

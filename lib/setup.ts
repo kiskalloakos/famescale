@@ -71,7 +71,10 @@ async function fromRemote(): Promise<SetupData | null> {
     showRevenue: data.show_revenue,
     showDebts: data.show_debts ?? false,
     showNetWorth: data.show_net_worth ?? false,
-    showRecurrings: data.show_recurrings ?? false,
+    // Recurrings shows by default; users opt out via Settings. The column
+    // is NOT NULL post-migration, but if the remote read predates it, fall
+    // back to shown so the tab never silently disappears.
+    showRecurrings: data.show_recurrings ?? true,
     showGoals: data.show_goals ?? false,
     includeDebtsInNetWorth: data.net_worth_include_debts ?? true,
     tabOrder: normalizeTabOrder(data.tab_order as string[] | null),

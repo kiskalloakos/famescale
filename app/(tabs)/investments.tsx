@@ -500,8 +500,6 @@ const s = StyleSheet.create({
     marginBottom: 14,
     borderTopWidth: 1,
     borderTopColor: '#222',
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
   },
   toggleTitle: { fontSize: 14, color: '#EEE', fontWeight: '600' },
   toggleHint: { fontSize: 11, color: '#555', marginTop: 4, lineHeight: 14, fontWeight: '500' },

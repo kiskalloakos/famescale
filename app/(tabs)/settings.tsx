@@ -110,7 +110,8 @@ export default function Settings() {
       | 'showRevenue'
       | 'showDebts'
       | 'showNetWorth'
-      | 'showGoals',
+      | 'showGoals'
+      | 'showRecurrings',
   ) => {
     if (!setup) return;
     const next: SetupData = { ...setup, [key]: !setup[key] };
@@ -206,11 +207,18 @@ export default function Settings() {
                     | 'showRevenue'
                     | 'showDebts'
                     | 'showNetWorth'
-                    | 'showGoals';
+                    | 'showGoals'
+                    | 'showRecurrings';
                   icon: keyof typeof Ionicons.glyphMap;
                   title: string;
                   desc: string;
                 }[] = [
+                  {
+                    key: 'showRecurrings',
+                    icon: 'repeat-outline',
+                    title: 'Recurrings',
+                    desc: 'Track monthly costs and mark them paid.',
+                  },
                   {
                     key: 'showInvestments',
                     icon: 'trending-up-outline',
@@ -450,14 +458,15 @@ export default function Settings() {
         </View>
       </Modal>
 
-      {/* Tab order — Dashboard/Recurrings pinned first, Settings last */}
+      {/* Tab order — Dashboard pinned first (then Recurrings if on),
+          Settings last */}
       <Modal visible={orderModal} transparent animationType="slide">
         <View style={s.overlay}>
           <View style={s.sheet}>
             <Text style={s.sheetTitle}>Tab order</Text>
             <Text style={s.sheetSub}>
-              Dashboard and Recurrings always come first; Settings is always
-              last. Reorder the rest below.
+              Dashboard always comes first (with Recurrings next when it's
+              on); Settings is always last. Reorder the rest below.
             </Text>
             {normalizeTabOrder(setup?.tabOrder).map((name, i, arr) => (
               <View

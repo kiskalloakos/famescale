@@ -60,8 +60,11 @@ revenue, currency, setup, transactions) exposes the same shape:
 - Monthly cost auto-reset (un-pay last month's costs, no refund) runs
   inside `dashboard.refreshDashboard` — screen-independent, so it happens
   on any data load. Screens show the toast via `subscribeMonthlyReset`.
-  (`setup.showRecurrings` is now dead — Recurrings is unconditionally
-  core; flag/column kept only to avoid churn.)
+  (`setup.showRecurrings` gates the Recurrings tab — default true; the
+  `MIGRATION_show_recurrings.sql` heal flips the legacy dead-flag `false`
+  to `true` so existing users keep it. When off, the Dashboard's Monthly
+  Costs summary card is hidden too, since it taps through to that tab;
+  hero math is unchanged — costs still exist in data.)
 - `supabase.ts` — client; anon key from `EXPO_PUBLIC_*` env. **RLS is the only
   access control.** All 8 tables use `FOR ALL ... USING/WITH CHECK
   (auth.uid() = user_id)`. Audit SQL at repo root: `SECURITY_VERIFY.sql`

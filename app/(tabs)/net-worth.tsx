@@ -482,7 +482,7 @@ const s = StyleSheet.create({
   },
   assetRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   assetEmoji: { fontSize: 20 },
-  assetName: { fontSize: 15, fontWeight: '600', color: '#EEE' },
+  assetName: { fontSize: 15, fontWeight: '500', color: '#EEE' },
   assetAmount: { fontSize: 15, fontWeight: '700', color: '#FFF', fontVariant: ['tabular-nums'] },
 
   // Add / edit asset sheet

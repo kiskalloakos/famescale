@@ -522,7 +522,7 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1C1C1C',
   },
-  emptyText: { fontSize: 13, color: '#3A3A3A', fontWeight: '500' },
+  emptyText: { fontSize: 14, color: '#777', fontWeight: '600' },
 
   addRow: {
     flexDirection: 'row',

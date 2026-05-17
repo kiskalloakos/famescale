@@ -557,7 +557,7 @@ const s = StyleSheet.create({
     borderColor: '#222',
     marginBottom: 16,
   },
-  breakdownTitle: { fontSize: 12, fontWeight: '600', color: '#BBB', letterSpacing: 0.5, marginBottom: 14 },
+  breakdownTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5, marginBottom: 14 },
   breakdownGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   breakdownItem: { width: '25%', paddingVertical: 8 },
   breakdownMonth: { fontSize: 10, fontWeight: '600', color: '#444', letterSpacing: 1, marginBottom: 3 },
@@ -707,7 +707,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
     marginBottom: 16,
   },
-  sheetTitle: { fontSize: 19, fontWeight: '700', color: '#FFF', letterSpacing: -0.3, marginBottom: 16 },
+  sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', letterSpacing: -0.3, marginBottom: 16 },
   liveTotal: { alignItems: 'flex-end' },
   liveTotalLabel: { fontSize: 9, fontWeight: '700', color: '#555', letterSpacing: 1 },
   liveTotalValue: {

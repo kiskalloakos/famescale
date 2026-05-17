@@ -130,6 +130,15 @@ export default function RootLayout() {
         if (initial) await consumeRecovery(initial);
       }
 
+      // SECURITY: getSession() (local, unvalidated) is intentional here and
+      // NOT a getUser() candidate. It only selects which screen to render —
+      // it grants zero data access. Every read/write goes through userId()
+      // (= supabase.auth.getUser(), server-validated) and is re-checked by
+      // RLS, so a stale/forged local token yields an empty app, never data.
+      // getUser() here would add a network round-trip at cold start and,
+      // when offline, return null — locking the user out of their own
+      // locally-cached data (the app is offline-capable via peekX caches).
+      // Audit 2026-05: reviewed, accepted as defense-in-depth, not a bypass.
       const { data: { session } } = await supabase.auth.getSession();
       apply(session?.user?.id ?? null);
     };

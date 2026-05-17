@@ -21,8 +21,8 @@ export default function SetNewPassword() {
 
   const submit = async () => {
     setError(null);
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    if (password.length < 10) {
+      setError('Password must be at least 10 characters.');
       return;
     }
     if (password !== confirm) {
@@ -60,7 +60,7 @@ export default function SetNewPassword() {
             style={s.input}
             value={password}
             onChangeText={setPassword}
-            placeholder="At least 8 characters"
+            placeholder="At least 10 characters"
             placeholderTextColor="#3A3A3A"
             secureTextEntry
             autoComplete="new-password"

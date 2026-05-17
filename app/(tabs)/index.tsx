@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,8 @@ import {
   subscribeMonthlyReset,
 } from '../../lib/dashboard';
 import { showToast } from '../../lib/toast';
+import { hintSeen, markHintSeen } from '../../lib/hints';
+import { SetupData, peekSetup, getSetup, refreshSetup, subscribeSetup } from '../../lib/setup';
 import { glowGreen, glowAmber, glowGreenHero } from '../../lib/glows';
 import { surface } from '../../lib/surface';
 import { feedback } from '../../lib/feedback';
@@ -77,7 +79,12 @@ export default function Dashboard() {
   const [accounts, setAccounts] = useState<Account[]>(() => peekDashboard().accounts);
   const [costs, setCosts] = useState<Cost[]>(() => peekDashboard().costs);
   const [currency, setCurrency] = useState(() => peekCurrencyForPage('dashboard'));
-  const [editMode, setEditMode] = useState(false);
+  // Recurrings can be toggled off in Settings; when it is, the Monthly
+  // Costs summary below is hidden (it taps through to that now-gone tab).
+  // Hero math is intentionally unchanged — costs still exist in data.
+  const [showRecurrings, setShowRecurrings] = useState(
+    () => peekSetup()?.showRecurrings ?? true,
+  );
 
   const [accountModal, setAccountModal] = useState<{ visible: boolean; editing: Account | null }>({
     visible: false,
@@ -130,6 +137,42 @@ export default function Dashboard() {
       ),
     [],
   );
+
+  // One-time tip: the account rows have no visible edit/reorder affordance
+  // (deliberately — hidden by request), so the first time the user has at
+  // least one account on the Dashboard, slide up the same toast the Undo
+  // action uses to explain the gestures. Dashboard only mounts after
+  // onboarding, so reaching here already implies onboarding is done.
+  const reorderHintTried = useRef(false);
+  useEffect(() => {
+    if (reorderHintTried.current || accounts.length === 0) return;
+    reorderHintTried.current = true;
+    hintSeen('accountsReorder').then((seen) => {
+      if (seen) return;
+      markHintSeen('accountsReorder');
+      showToast(
+        'Tip: tap an account to edit it, or press & hold and drag to reorder.',
+        { label: 'Got it', onPress: () => {} },
+        8000,
+      );
+    });
+  }, [accounts.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const apply = (d: SetupData | null) => {
+      if (!cancelled && d) setShowRecurrings(d.showRecurrings);
+    };
+    getSetup().then(apply);
+    refreshSetup().then(apply);
+    const unsubscribe = subscribeSetup((d) => {
+      if (!cancelled) setShowRecurrings(d.showRecurrings);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -210,31 +253,23 @@ export default function Dashboard() {
   const renderAccountItem = useCallback(
     ({ item: account, drag, isActive }: RenderItemParams<Account>) => (
       <View style={[s.row, isActive && s.rowDragging]}>
-        {editMode && accounts.length > 1 && (
-          <TouchableOpacity
-            onLongPress={drag}
-            delayLongPress={120}
-            style={s.dragHandle}
-          >
-            <Ionicons name="reorder-three-outline" size={18} color="#444" />
-          </TouchableOpacity>
-        )}
+        {/* No visible edit affordance: tap the row to edit, long-press to
+            reorder (the 3-line handle's old job, now bound to the row). */}
         <TouchableOpacity
           style={s.rowBody}
-          onPress={editMode ? () => openEditAccount(account) : undefined}
-          activeOpacity={editMode ? 0.2 : 1}
+          onPress={() => openEditAccount(account)}
+          onLongPress={accounts.length > 1 ? drag : undefined}
+          delayLongPress={150}
+          activeOpacity={0.2}
         >
           <Text style={s.rowLabel}>{account.name}</Text>
           <View style={s.rowRight}>
             <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbol)}</Text>
-            {editMode && (
-              <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
-            )}
           </View>
         </TouchableOpacity>
       </View>
     ),
-    [accounts.length, symbol, editMode],
+    [accounts.length, symbol],
   );
 
   const deleteAccount = async (account: Account) => {
@@ -289,17 +324,6 @@ export default function Dashboard() {
     <View style={[s.container, { paddingBottom: insets.bottom }]}>
       <View style={[s.header, { justifyContent: 'center' }]}>
         <View style={s.headerActions}>
-          <TouchableOpacity
-            style={[s.headerEditBtn, editMode && s.headerEditBtnActive]}
-            onPress={() => setEditMode((e) => !e)}
-          >
-            <Ionicons
-              name="pencil-outline"
-              size={18}
-              color={editMode ? '#00C896' : '#777'}
-              style={editMode ? glowGreen : undefined}
-            />
-          </TouchableOpacity>
           <TouchableOpacity style={s.headerRemoveBtn} onPress={() => openMoneyFlow('remove')}>
             <Ionicons name="remove" size={24} color="#FFA94D" style={glowAmber} />
           </TouchableOpacity>
@@ -343,29 +367,21 @@ export default function Dashboard() {
                   return (
                     <DraggableRow
                       key={account.id}
-                      handlers={{ ...d, draggable: d.draggable && editMode && accounts.length > 1 }}
+                      handlers={{ ...d, draggable: d.draggable && accounts.length > 1 }}
                       style={[
                         s.row,
                         d.isDragging && s.rowDragging,
                         d.isHovered && s.rowDropTarget,
                       ]}
                     >
-                      {editMode && accounts.length > 1 && (
-                        <View style={s.dragHandle}>
-                          <Ionicons name="reorder-three-outline" size={18} color="#444" />
-                        </View>
-                      )}
                       <TouchableOpacity
                         style={s.rowBody}
-                        onPress={editMode ? () => openEditAccount(account) : undefined}
-                        activeOpacity={editMode ? 0.2 : 1}
+                        onPress={() => openEditAccount(account)}
+                        activeOpacity={0.2}
                       >
                         <Text style={s.rowLabel}>{account.name}</Text>
                         <View style={s.rowRight}>
                           <Text style={s.rowValue}>{fmt(parseAmt(account.amount), symbol)}</Text>
-                          {editMode && (
-                            <Ionicons name="pencil-outline" size={13} color="#444" style={{ marginLeft: 8 }} />
-                          )}
                         </View>
                       </TouchableOpacity>
                     </DraggableRow>
@@ -388,22 +404,25 @@ export default function Dashboard() {
           )}
         </View>
 
-        {/* Monthly costs — managed in Recurrings now; this is a summary */}
-        <TouchableOpacity
-          style={s.card}
-          activeOpacity={0.7}
-          onPress={() => router.navigate('/recurrings')}
-        >
-          <View style={s.cardHeader}>
-            <View>
-              <Text style={s.cardTitle}>Monthly Costs</Text>
-              <Text style={s.cardSubtitle}>
-                {fmt(unpaidCosts, symbol)} unpaid · {fmt(costs.reduce((sum, c) => sum + parseAmt(c.amount), 0), symbol)} total
-              </Text>
+        {/* Monthly costs — managed in Recurrings; this is a tap-through
+            summary, so it's hidden when that tab is toggled off. */}
+        {showRecurrings && (
+          <TouchableOpacity
+            style={s.card}
+            activeOpacity={0.7}
+            onPress={() => router.navigate('/recurrings')}
+          >
+            <View style={s.cardHeader}>
+              <View>
+                <Text style={s.cardTitle}>Monthly Costs</Text>
+                <Text style={s.cardSubtitle}>
+                  {fmt(unpaidCosts, symbol)} unpaid · {fmt(costs.reduce((sum, c) => sum + parseAmt(c.amount), 0), symbol)} total
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#555" />
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#555" />
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        )}
 
         <View style={{ height: 40 }} />
       </SortableScroll>
@@ -674,33 +693,6 @@ const s = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  // Neutral raised chip — same "lit from above" material as the nav pill,
-  // so the pencil reads as a real button, not a disabled one. No color:
-  // color is reserved for the accent +/- actions beside it.
-  headerEditBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1F1F1F',
-    borderWidth: 1,
-    borderColor: '#2C2C2C',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  headerEditBtnActive: {
-    backgroundColor: '#0D1F1A',
-    borderColor: '#1F3A30',
-    shadowColor: '#00C896',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
-  },
   scroll: { paddingHorizontal: 16 },
   heroCard: { ...surface, borderRadius: 20, padding: 24, marginBottom: 16 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
@@ -729,16 +721,6 @@ const s = StyleSheet.create({
   },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
   cardSubtitle: { fontSize: 12, color: '#555', marginTop: 3, fontWeight: '500', fontVariant: ['tabular-nums'] },
-  iconBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#0D0D0D',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#2C2C2C',
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -766,13 +748,6 @@ const s = StyleSheet.create({
     gap: 8,
   },
   costBody: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  dragHandle: {
-    width: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // @ts-ignore — web-only cursor hint
-    cursor: 'grab',
-  },
   rowDragging: { opacity: 0.35 },
   rowDropTarget: { borderTopWidth: 2, borderTopColor: '#00C896' },
   rowLabel: { flex: 1, fontSize: 15, color: '#EEE', fontWeight: '500' },
@@ -788,7 +763,7 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1C1C1C',
   },
-  emptyText: { fontSize: 13, color: '#3A3A3A', fontWeight: '500' },
+  emptyText: { fontSize: 14, color: '#777', fontWeight: '600' },
   addCostRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -864,7 +839,6 @@ const s = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#222',
     alignItems: 'center',
-    marginTop: 8,
   },
   btnCancelText: { fontSize: 15, color: '#666', fontWeight: '500' },
   btnSave: {

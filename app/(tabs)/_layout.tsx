@@ -23,7 +23,7 @@ const DEFAULT_SETUP: SetupData = {
   showRevenue: true,
   showDebts: false,
   showNetWorth: false,
-  showRecurrings: false,
+  showRecurrings: true,
   showGoals: false,
   includeDebtsInNetWorth: true,
   tabOrder: [...ORDERABLE_TABS],
@@ -38,7 +38,7 @@ const TABS: {
 }[] = [
   { name: 'index', title: 'Dashboard', visible: () => true },
   // Core tab right after Dashboard — it owns cost management, can't be hidden.
-  { name: 'recurrings', title: 'Recurrings', visible: () => true },
+  { name: 'recurrings', title: 'Recurrings', visible: (s) => s.showRecurrings },
   { name: 'investments', title: 'Investments', visible: (s) => s.showInvestments },
   { name: 'savings', title: 'Savings', visible: (s) => s.showSavings },
   { name: 'revenue', title: 'Revenue', visible: (s) => s.showRevenue },
@@ -75,6 +75,22 @@ const DIM = 0.35;
 function NativeBar({ state, navigation, position, layout }: MaterialTopTabBarProps) {
   const insets = useSafeAreaInsets();
   const w = layout.width;
+  // Both the fixed pill (`left`) and the strip (`translateX`) are derived
+  // from `w`. On the first frame after mount/remount RNTV hasn't measured
+  // the bar yet so `w === 0`, painting the pill/strip shifted left and
+  // mislabeled until a later layout pass (in practice, the first touch)
+  // forces a re-render. Keep the bar mounted (stable height/insets) but
+  // hold its contents hidden until `w > 0` and one rAF later, so the
+  // corrected transform has committed before we reveal — same gate WebBar
+  // uses for its first scroll-center.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (w > 0 && !ready) {
+      const id = requestAnimationFrame(() => setReady(true));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [w, ready]);
+
   const translateX = useMemo(
     () => Animated.subtract(w / 2 - SLOT_W / 2, Animated.multiply(position, SLOT_W)),
     [position, w],
@@ -82,7 +98,7 @@ function NativeBar({ state, navigation, position, layout }: MaterialTopTabBarPro
 
   return (
     <View style={[styles.bar, { paddingTop: insets.top + 10 }]}>
-      <View style={[styles.track, { height: PILL_H }]}>
+      <View style={[styles.track, { height: PILL_H }, !ready && styles.hidden]}>
         <LinearGradient
           colors={['#262626', '#1D1D1D', '#181818']}
           start={{ x: 0, y: 0 }}
@@ -141,7 +157,8 @@ function WebBar({ state, navigation }: MaterialTopTabBarProps) {
   const scrollRef = useRef<ScrollView>(null);
   const layouts = useRef<Record<number, { x: number; width: number }>>({});
   const [barW, setBarW] = useState(0);
-  // Native only: stays false (bar hidden) until the first center lands.
+  // Web renders immediately (WEB === true); the false branch is dead here
+  // since WebBar only mounts on web. NativeBar has its own `ready` gate.
   const [ready, setReady] = useState(WEB);
   const placed = useRef(WEB);
 
@@ -241,12 +258,13 @@ export default function TabLayout() {
     };
   }, []);
 
-  // Dashboard + Recurrings are pinned first, Settings last; only the
-  // optional tabs in between are user-orderable (setup.tabOrder).
+  // Dashboard is pinned first and Settings last; Recurrings (when enabled)
+  // is pinned right after Dashboard. Only the optional tabs in between are
+  // user-orderable (setup.tabOrder).
   const visible = useMemo(() => {
     const byName = (n: string) => TABS.find((t) => t.name === n)!;
     const order = normalizeTabOrder(setup.tabOrder);
-    const front = ['index', 'recurrings'].map(byName);
+    const front = (setup.showRecurrings ? ['index', 'recurrings'] : ['index']).map(byName);
     const middle = order.map(byName).filter((t) => t.visible(setup));
     return [...front, ...middle, byName('settings')];
   }, [setup]);

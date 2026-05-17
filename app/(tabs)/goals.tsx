@@ -406,7 +406,7 @@ const s = StyleSheet.create({
   },
   cardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   emoji: { fontSize: 20 },
-  name: { fontSize: 16, fontWeight: '600', color: '#EEE' },
+  name: { fontSize: 15, fontWeight: '500', color: '#EEE' },
   pctText: { fontSize: 13, fontWeight: '700', color: '#00C896', fontVariant: ['tabular-nums'] },
   barTrack: {
     height: 8,
@@ -427,7 +427,7 @@ const s = StyleSheet.create({
   hint: { fontSize: 11, color: '#777', fontWeight: '500', flexShrink: 1, textAlign: 'right', marginLeft: 12 },
 
   empty: { alignItems: 'center', paddingVertical: 48, gap: 8, paddingHorizontal: 24 },
-  emptyText: { fontSize: 15, color: '#777', fontWeight: '600' },
+  emptyText: { fontSize: 14, color: '#777', fontWeight: '600' },
   emptyHint: { fontSize: 12, color: '#555', textAlign: 'center' },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },

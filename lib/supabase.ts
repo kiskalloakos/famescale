@@ -12,6 +12,14 @@ if (!url || !anonKey) {
   );
 }
 
+// SECURITY (audit 2026-05, accepted): native uses sandboxed AsyncStorage.
+// On web, supabase-js falls back to localStorage for the session JWT —
+// JS-readable, so any XSS could exfiltrate it. There is no httpOnly-cookie
+// option without a backend (this app has none). Accepted risk: the web
+// XSS surface is minimal (no user-rendered HTML, no 3rd-party scripts) and
+// `app/+html.tsx` ships a strict CSP (script-src 'self', object-src 'none',
+// frame-ancestors 'none', scoped connect-src) as the mitigation. Keep that
+// CSP tight — it is what makes this acceptable.
 export const supabase = createClient(url, anonKey, {
   auth: {
     storage: AsyncStorage,

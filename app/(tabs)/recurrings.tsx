@@ -35,7 +35,7 @@ import {
   newId,
   currentMonthKey,
 } from '../../lib/dashboard';
-import { logTransaction } from '../../lib/transactions';
+import { logTransaction, deleteLastCostTransaction } from '../../lib/transactions';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen, glowAmber } from '../../lib/glows';
@@ -158,6 +158,11 @@ export default function Recurrings() {
     cost: null,
   });
 
+  const closeAccountPicker = useCallback(
+    () => setAccountPicker({ visible: false, cost: null }),
+    [],
+  );
+
   const tapTickbox = (cost: Cost) => {
     if (cost.paid) {
       // Untick — refund to the account it was paid from (if it still exists).
@@ -171,14 +176,9 @@ export default function Recurrings() {
         };
         setAccounts(accounts.map((a) => (a.id === updatedAccount.id ? updatedAccount : a)));
         persistAccount(updatedAccount);
-        logTransaction({
-          accountId: refundTo.id,
-          amount: parseAmt(cost.amount),
-          direction: 'in',
-          kind: 'refund',
-          referenceId: cost.id,
-          note: cost.name,
-        });
+        // Reverse the original payment in the ledger (delete the row)
+        // instead of stacking an offsetting refund entry.
+        deleteLastCostTransaction(cost.id);
       }
       const updated: Cost = { ...cost, paid: false, paidFromAccountId: null, paidMonth: null };
       setCosts(costs.map((c) => (c.id === cost.id ? updated : c)));
@@ -271,9 +271,6 @@ export default function Recurrings() {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <Text style={s.cardTitle}>This month</Text>
-            <TouchableOpacity style={s.addBtn} onPress={openAdd}>
-              <Ionicons name="add" size={20} color="#00C896" style={glowGreen} />
-            </TouchableOpacity>
           </View>
 
           {sorted.length === 0 ? (
@@ -283,23 +280,13 @@ export default function Recurrings() {
               <Text style={s.emptyHint}>Tap to add your first recurring cost.</Text>
             </TouchableOpacity>
           ) : (
-            sorted.map((c, i) => (
+            <>
+              {sorted.map((c, i) => (
               <Pressable
                 key={c.id}
                 onPress={() => openEdit(c)}
                 style={[s.row, i > 0 && { borderTopWidth: 1, borderTopColor: '#1A1A1A' }]}
               >
-                <Pressable
-                  onPress={() => tapTickbox(c)}
-                  hitSlop={8}
-                  style={[s.statusDot, c.paid ? s.statusPaid : s.statusDue]}
-                >
-                  <Ionicons
-                    name={c.paid ? 'checkmark' : 'time-outline'}
-                    size={13}
-                    color={c.paid ? '#00C896' : '#FFA94D'}
-                  />
-                </Pressable>
                 <View style={{ flex: 1 }}>
                   <Text style={[s.rowName, c.paid && s.rowNamePaid]}>{c.name}</Text>
                   <Text style={s.rowDue}>Due {ordinal(c.dueDay ?? 1)}</Text>
@@ -307,8 +294,25 @@ export default function Recurrings() {
                 <Text style={[s.rowAmount, c.paid && s.rowAmountPaid]}>
                   {fmt(parseAmt(c.amount), symbol)}
                 </Text>
+                <Pressable
+                  onPress={() => tapTickbox(c)}
+                  hitSlop={8}
+                  style={[s.statusDot, c.paid ? s.statusPaid : s.statusDue]}
+                >
+                  <Ionicons
+                    name={c.paid ? 'checkmark' : 'time-outline'}
+                    size={18}
+                    color={c.paid ? '#00C896' : '#FFA94D'}
+                    style={c.paid ? glowGreen : glowAmber}
+                  />
+                </Pressable>
               </Pressable>
-            ))
+              ))}
+              <TouchableOpacity style={s.addCostRow} onPress={openAdd}>
+                <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
+                <Text style={[s.addCostText, glowGreen]}>Add Recurring</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
@@ -384,10 +388,30 @@ export default function Recurrings() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={accountPicker.visible} transparent animationType="slide">
-        <View style={s.overlay}>
-          <View style={s.sheet}>
-            <Text style={s.sheetTitle}>What did you pay with?</Text>
+      <Modal
+        visible={accountPicker.visible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeAccountPicker}
+      >
+        {/* Tapping the dimmed backdrop dismisses (standard bottom-sheet
+            behavior). The inner Pressable becomes the touch responder so
+            taps on the sheet itself don't bubble up and close it. */}
+        <Pressable style={s.overlay} onPress={closeAccountPicker}>
+          <Pressable style={s.sheet} onPress={() => {}}>
+            <View style={s.sheetHeader}>
+              <Text style={[s.sheetTitle, { marginBottom: 0, flex: 1 }]}>
+                What did you pay with?
+              </Text>
+              <TouchableOpacity
+                onPress={closeAccountPicker}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={s.sheetClose}
+                accessibilityLabel="Close"
+              >
+                <Ionicons name="close" size={22} color="#999" />
+              </TouchableOpacity>
+            </View>
             {accountPicker.cost && (
               <Text style={s.pickerSub}>
                 Paying {fmt(parseAmt(accountPicker.cost.amount), symbol)} for{' '}
@@ -419,14 +443,8 @@ export default function Recurrings() {
                 );
               })}
             </ScrollView>
-            <TouchableOpacity
-              style={s.btnCancel}
-              onPress={() => setAccountPicker({ visible: false, cost: null })}
-            >
-              <Text style={s.btnCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -443,10 +461,10 @@ const s = StyleSheet.create({
     alignItems: 'flex-start',
   },
   heroLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
-    color: '#666',
-    letterSpacing: 1,
+    color: '#555',
+    letterSpacing: 1.5,
     marginBottom: 4,
   },
   heroAmount: { fontSize: 30, fontWeight: '700', color: '#FFA94D' },
@@ -469,16 +487,15 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
-  addBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  addCostRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#161616',
-    borderWidth: 1,
-    borderColor: '#1F3A30',
+    gap: 8,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#1C1C1C',
   },
+  addCostText: { fontSize: 14, color: '#00C896', fontWeight: '500' },
 
   row: {
     flexDirection: 'row',
@@ -488,16 +505,17 @@ const s = StyleSheet.create({
     gap: 12,
   },
   statusDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#161616',
     borderWidth: 1,
   },
-  statusPaid: { backgroundColor: '#0D1F1A', borderColor: '#1F3A30' },
-  statusDue: { backgroundColor: '#241804', borderColor: '#3A2A0F' },
-  rowName: { fontSize: 15, fontWeight: '600', color: '#EEE' },
+  statusPaid: { borderColor: '#1F3A30' },
+  statusDue: { borderColor: '#3A2A0F' },
+  rowName: { fontSize: 15, fontWeight: '500', color: '#EEE' },
   rowNamePaid: { color: '#777' },
   rowDue: { fontSize: 12, color: '#666', marginTop: 2 },
   rowAmount: { fontSize: 15, fontWeight: '700', color: '#FFF', fontVariant: ['tabular-nums'] },
@@ -522,6 +540,20 @@ const s = StyleSheet.create({
     maxHeight: '85%',
   },
   sheetTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', letterSpacing: -0.3, marginBottom: 16 },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sheetClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#222',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
   inputLabel: {
     fontSize: 11,
     fontWeight: '600',
