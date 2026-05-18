@@ -36,9 +36,33 @@ import {
   currentMonthKey,
 } from '../../lib/dashboard';
 import { logTransaction, deleteLastCostTransaction } from '../../lib/transactions';
+import { nextOccurrence, annualizedPeriodicTotal } from '../../lib/finance';
 import { showToast } from '../../lib/toast';
 import { feedback } from '../../lib/feedback';
 import { glowGreen, glowAmber } from '../../lib/glows';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// 1 → Monthly, 3 → Quarterly, 12 → Yearly, anything else → "Every N months".
+function freqLabel(n: number): string {
+  if (n === 1) return 'Monthly';
+  if (n === 3) return 'Quarterly';
+  if (n === 12) return 'Yearly';
+  return `Every ${n} months`;
+}
+
+type FreqMode = 'monthly' | 'quarterly' | 'yearly' | 'custom';
+const MODE_INTERVAL: Record<Exclude<FreqMode, 'custom'>, number> = {
+  monthly: 1,
+  quarterly: 3,
+  yearly: 12,
+};
+function modeForInterval(n: number): FreqMode {
+  if (n === 1) return 'monthly';
+  if (n === 3) return 'quarterly';
+  if (n === 12) return 'yearly';
+  return 'custom';
+}
 
 function fmt(value: number, symbol: string): string {
   return `${symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -97,11 +121,23 @@ export default function Recurrings() {
   const [formName, setFormName] = useState('');
   const [formAmount, setFormAmount] = useState('');
   const [formDueDay, setFormDueDay] = useState('1');
+  const [formMode, setFormMode] = useState<FreqMode>('monthly');
+  const [formCustomN, setFormCustomN] = useState('2');
+  const [formDueMonth, setFormDueMonth] = useState(new Date().getMonth() + 1);
+
+  // The effective interval the form currently represents.
+  const formInterval =
+    formMode === 'custom'
+      ? Math.max(2, parseInt(formCustomN) || 2)
+      : MODE_INTERVAL[formMode];
 
   const openAdd = () => {
     setFormName('');
     setFormAmount('');
     setFormDueDay(String(new Date().getDate()));
+    setFormMode('monthly');
+    setFormCustomN('2');
+    setFormDueMonth(new Date().getMonth() + 1);
     feedback.tap();
     setCostModal({ visible: true, editing: null });
   };
@@ -110,6 +146,11 @@ export default function Recurrings() {
     setFormName(cost.name);
     setFormAmount(cost.amount);
     setFormDueDay(String(cost.dueDay ?? 1));
+    const interval = cost.intervalMonths ?? 1;
+    const mode = modeForInterval(interval);
+    setFormMode(mode);
+    setFormCustomN(mode === 'custom' ? String(interval) : '2');
+    setFormDueMonth(cost.dueMonth ?? new Date().getMonth() + 1);
     feedback.tap();
     setCostModal({ visible: true, editing: cost });
   };
@@ -118,8 +159,12 @@ export default function Recurrings() {
     if (!formName.trim()) return;
     const editing = costModal.editing;
     const dueDay = Math.min(31, Math.max(1, parseInt(formDueDay) || 1));
+    const intervalMonths = formInterval;
+    // dueMonth anchors non-monthly bills to a calendar month; monthly bills
+    // recur every month so it carries no meaning — store null.
+    const dueMonth = intervalMonths === 1 ? null : formDueMonth;
     const cost: Cost = editing
-      ? { ...editing, name: formName.trim(), amount: formAmount, dueDay }
+      ? { ...editing, name: formName.trim(), amount: formAmount, dueDay, intervalMonths, dueMonth }
       : {
           id: newId(),
           name: formName.trim(),
@@ -127,6 +172,8 @@ export default function Recurrings() {
           paid: false,
           position: costs.length,
           dueDay,
+          intervalMonths,
+          dueMonth,
           paidFromAccountId: null,
           paidMonth: null,
         };
@@ -226,12 +273,60 @@ export default function Recurrings() {
   };
 
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
-  const total = costs.reduce((sum, c) => sum + parseAmt(c.amount), 0);
-  const paid = costs.reduce((sum, c) => (c.paid ? sum + parseAmt(c.amount) : sum), 0);
+
+  // Monthly costs drive the hero. Periodic (quarterly/yearly/custom) bills are
+  // deliberately kept out of the monthly figure and surfaced separately so the
+  // "left to pay this month" number stays honest.
+  const monthlyCosts = costs.filter((c) => (c.intervalMonths ?? 1) === 1);
+  const periodicCosts = costs.filter((c) => (c.intervalMonths ?? 1) !== 1);
+
+  const total = monthlyCosts.reduce((sum, c) => sum + parseAmt(c.amount), 0);
+  const paid = monthlyCosts.reduce((sum, c) => (c.paid ? sum + parseAmt(c.amount) : sum), 0);
   const left = Math.max(0, total - paid);
   const pct = total > 0 ? Math.min(1, paid / total) : 0;
 
-  const sorted = [...costs].sort((a, b) => (a.dueDay ?? 1) - (b.dueDay ?? 1));
+  const sorted = [...monthlyCosts].sort((a, b) => (a.dueDay ?? 1) - (b.dueDay ?? 1));
+
+  // Periodic: annualized headline, rows sorted by their next due date.
+  const annualPeriodic = annualizedPeriodicTotal(periodicCosts);
+  const periodicSorted = [...periodicCosts]
+    .map((c) => ({ c, due: nextOccurrence(c.dueMonth ?? 1, c.intervalMonths ?? 12) }))
+    .sort(
+      (a, b) =>
+        a.due.year - b.due.year ||
+        a.due.month - b.due.month ||
+        (a.c.dueDay ?? 1) - (b.c.dueDay ?? 1),
+    );
+
+  // Shared row renderer. `subtitle` is the only thing that differs between the
+  // monthly list ("Due 15th") and the periodic list ("Yearly · Mar 2027").
+  const renderCostRow = (c: Cost, i: number, subtitle: string) => (
+    <Pressable
+      key={c.id}
+      onPress={() => openEdit(c)}
+      style={[s.row, i > 0 && { borderTopWidth: 1, borderTopColor: '#1A1A1A' }]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={[s.rowName, c.paid && s.rowNamePaid]}>{c.name}</Text>
+        <Text style={s.rowDue}>{subtitle}</Text>
+      </View>
+      <Text style={[s.rowAmount, c.paid && s.rowAmountPaid]}>
+        {fmt(parseAmt(c.amount), symbol)}
+      </Text>
+      <Pressable
+        onPress={() => tapTickbox(c)}
+        hitSlop={8}
+        style={[s.statusDot, c.paid ? s.statusPaid : s.statusDue]}
+      >
+        <Ionicons
+          name={c.paid ? 'checkmark' : 'time-outline'}
+          size={18}
+          color={c.paid ? '#00C896' : '#FFA94D'}
+          style={c.paid ? glowGreen : glowAmber}
+        />
+      </Pressable>
+    </Pressable>
+  );
 
   return (
     <View style={[s.container, { paddingBottom: insets.bottom }]}>
@@ -262,52 +357,26 @@ export default function Recurrings() {
             </View>
           </View>
           <Text style={s.heroSub}>
-            {fmt(total, symbol)} total · {costs.length}{' '}
-            {costs.length === 1 ? 'recurring' : 'recurrings'}
+            {fmt(total, symbol)} monthly · {monthlyCosts.length}{' '}
+            {monthlyCosts.length === 1 ? 'recurring' : 'recurrings'}
           </Text>
         </View>
 
-        {/* This month */}
+        {/* Monthly */}
         <View style={s.card}>
           <View style={s.cardHeader}>
-            <Text style={s.cardTitle}>This month</Text>
+            <Text style={s.cardTitle}>Monthly</Text>
           </View>
 
           {sorted.length === 0 ? (
             <TouchableOpacity style={s.empty} onPress={openAdd}>
               <Ionicons name="repeat-outline" size={26} color="#333" />
-              <Text style={s.emptyText}>No recurring costs yet</Text>
+              <Text style={s.emptyText}>No monthly costs yet</Text>
               <Text style={s.emptyHint}>Tap to add your first recurring cost.</Text>
             </TouchableOpacity>
           ) : (
             <>
-              {sorted.map((c, i) => (
-              <Pressable
-                key={c.id}
-                onPress={() => openEdit(c)}
-                style={[s.row, i > 0 && { borderTopWidth: 1, borderTopColor: '#1A1A1A' }]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.rowName, c.paid && s.rowNamePaid]}>{c.name}</Text>
-                  <Text style={s.rowDue}>Due {ordinal(c.dueDay ?? 1)}</Text>
-                </View>
-                <Text style={[s.rowAmount, c.paid && s.rowAmountPaid]}>
-                  {fmt(parseAmt(c.amount), symbol)}
-                </Text>
-                <Pressable
-                  onPress={() => tapTickbox(c)}
-                  hitSlop={8}
-                  style={[s.statusDot, c.paid ? s.statusPaid : s.statusDue]}
-                >
-                  <Ionicons
-                    name={c.paid ? 'checkmark' : 'time-outline'}
-                    size={18}
-                    color={c.paid ? '#00C896' : '#FFA94D'}
-                    style={c.paid ? glowGreen : glowAmber}
-                  />
-                </Pressable>
-              </Pressable>
-              ))}
+              {sorted.map((c, i) => renderCostRow(c, i, `Due ${ordinal(c.dueDay ?? 1)}`))}
               <TouchableOpacity style={s.addCostRow} onPress={openAdd}>
                 <Ionicons name="add-circle-outline" size={16} color="#00C896" style={glowGreen} />
                 <Text style={[s.addCostText, glowGreen]}>Add Recurring</Text>
@@ -315,6 +384,33 @@ export default function Recurrings() {
             </>
           )}
         </View>
+
+        {/* Periodic — quarterly / yearly / custom. Annualized headline; NOT
+            folded into the monthly figure above. */}
+        {periodicCosts.length > 0 && (
+          <View style={[s.card, { marginTop: 14 }]}>
+            <View style={s.cardHeader}>
+              <View>
+                <Text style={s.cardTitle}>Periodic</Text>
+                <Text style={s.cardSub}>
+                  {fmt(annualPeriodic, symbol)}/yr · {periodicCosts.length}{' '}
+                  {periodicCosts.length === 1 ? 'bill' : 'bills'}
+                </Text>
+              </View>
+            </View>
+            {periodicSorted.map(({ c, due }, i) =>
+              renderCostRow(
+                c,
+                i,
+                `${freqLabel(c.intervalMonths ?? 12)} · ${
+                  due.year === new Date().getFullYear()
+                    ? `${MONTHS[due.month - 1]} ${ordinal(c.dueDay ?? 1)}`
+                    : `${MONTHS[due.month - 1]} ${due.year}`
+                }`,
+              ),
+            )}
+          </View>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -327,8 +423,13 @@ export default function Recurrings() {
           <View style={s.overlay}>
             <View style={s.sheet}>
               <Text style={s.sheetTitle}>
-                {costModal.editing ? 'Edit Cost' : 'Add Monthly Cost'}
+                {costModal.editing ? 'Edit Cost' : 'Add Recurring Cost'}
               </Text>
+              <ScrollView
+                style={{ flexShrink: 1 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
               <Text style={s.inputLabel}>Name</Text>
               <TextInput
                 style={s.input}
@@ -363,6 +464,67 @@ export default function Recurrings() {
                   />
                 </View>
               </View>
+
+              <Text style={s.inputLabel}>How often</Text>
+              <View style={s.freqRow}>
+                {(['monthly', 'quarterly', 'yearly', 'custom'] as FreqMode[]).map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[s.freqChip, formMode === m && s.freqChipOn]}
+                    onPress={() => {
+                      feedback.select();
+                      setFormMode(m);
+                    }}
+                  >
+                    <Text style={[s.freqChipText, formMode === m && s.freqChipTextOn]}>
+                      {m === 'custom' ? 'Custom' : freqLabel(MODE_INTERVAL[m])}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {formMode === 'custom' && (
+                <View style={s.customRow}>
+                  <Text style={s.customLabel}>Every</Text>
+                  <TextInput
+                    style={[s.input, { marginBottom: 0, width: 64, textAlign: 'center' }]}
+                    value={formCustomN}
+                    onChangeText={setFormCustomN}
+                    placeholder="2"
+                    placeholderTextColor="#444"
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                  <Text style={s.customLabel}>months</Text>
+                </View>
+              )}
+
+              {formInterval !== 1 && (
+                <>
+                  <Text style={[s.inputLabel, { marginTop: 18 }]}>
+                    {formMode === 'quarterly' ? 'Anchor month (recurs every 3)' : 'Due month'}
+                  </Text>
+                  <View style={s.monthGrid}>
+                    {MONTHS.map((mo, idx) => {
+                      const on = formDueMonth === idx + 1;
+                      return (
+                        <TouchableOpacity
+                          key={mo}
+                          style={[s.monthChip, on && s.monthChipOn]}
+                          onPress={() => {
+                            feedback.select();
+                            setFormDueMonth(idx + 1);
+                          }}
+                        >
+                          <Text style={[s.monthChipText, on && s.monthChipTextOn]}>{mo}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <View style={{ height: 4 }} />
+                </>
+              )}
+              </ScrollView>
               <View style={s.sheetActions}>
                 <TouchableOpacity
                   style={s.btnCancel}
@@ -487,6 +649,36 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardTitle: { fontSize: 13, fontWeight: '600', color: '#BBB', letterSpacing: 0.5 },
+  cardSub: { fontSize: 12, color: '#666', marginTop: 4, fontWeight: '500' },
+
+  freqRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  freqChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#222',
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+    alignItems: 'center',
+  },
+  freqChipOn: { backgroundColor: '#10261F', borderColor: '#1F3A30' },
+  freqChipText: { fontSize: 12, color: '#888', fontWeight: '600' },
+  freqChipTextOn: { color: '#00C896' },
+  customRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  customLabel: { fontSize: 14, color: '#888', fontWeight: '500' },
+  monthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  monthChip: {
+    width: '22%',
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: '#222',
+    borderWidth: 1,
+    borderColor: '#2C2C2C',
+    alignItems: 'center',
+  },
+  monthChipOn: { backgroundColor: '#10261F', borderColor: '#1F3A30' },
+  monthChipText: { fontSize: 12, color: '#888', fontWeight: '600' },
+  monthChipTextOn: { color: '#00C896' },
   addCostRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -54,12 +54,24 @@ revenue, currency, setup, transactions) exposes the same shape:
 - `saveX()` — local + Supabase upsert (via `sync.ts` `reportable()` →
   `SyncIndicator`).
 - `finance.ts` — pure, dependency-free money/logic (`fv`,
-  `monthsSinceStart`, `computeNetWorth`, `resetStaleCosts`); unit-tested
-  (`finance.test.ts`, 26 cases). `userId()` lives in `supabase.ts`;
+  `monthsSinceStart`, `computeNetWorth`, `resetStaleCosts`, `monthDiff`,
+  `nextOccurrence`, `annualizedPeriodicTotal`); unit-tested
+  (`finance.test.ts`, 52 cases). `userId()` lives in `supabase.ts`;
   `CURRENCIES` in `currencies.ts` — both deduped, don't re-inline.
-- Monthly cost auto-reset (un-pay last month's costs, no refund) runs
-  inside `dashboard.refreshDashboard` — screen-independent, so it happens
-  on any data load. Screens show the toast via `subscribeMonthlyReset`.
+- **A `Cost` has an `intervalMonths` (1 monthly default, 3 quarterly, 12
+  yearly, N custom) and `dueMonth` (1–12 anchor for non-monthly; null for
+  monthly).** Recurrings splits the list: monthly costs feed the hero +
+  the Dashboard "Monthly Costs" summary; periodic (interval ≠ 1) bills are
+  deliberately **excluded from the monthly figure** and shown in a separate
+  "Periodic" card headlined by `annualizedPeriodicTotal` (Σ amount·12/N),
+  sorted by `nextOccurrence`. Don't fold periodic back into the monthly
+  number — it's an intentional product decision, not an oversight.
+- Cost auto-reset (un-pay, no refund) runs inside
+  `dashboard.refreshDashboard` — screen-independent, so it happens on any
+  data load. Screens show the toast via `subscribeMonthlyReset`. A cost
+  stays paid until `monthDiff(paidMonth, now) >= intervalMonths`, so
+  monthly clears next month (legacy behavior — `intervalMonths` defaults 1
+  via `?? 1`, so old rows are unaffected), quarterly after 3, yearly 12.
   (`setup.showRecurrings` gates the Recurrings tab — default true; the
   `MIGRATION_show_recurrings.sql` heal flips the legacy dead-flag `false`
   to `true` so existing users keep it. When off, the Dashboard's Monthly

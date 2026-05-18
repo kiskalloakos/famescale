@@ -18,8 +18,10 @@ export interface Cost {
   paid: boolean;
   position: number;
   dueDay: number;                        // 1–31, day of month bill is due
+  intervalMonths: number;                // 1 monthly (default), 3 quarterly, 12 yearly, N custom
+  dueMonth?: number | null;              // 1–12 anchor month; only meaningful when intervalMonths !== 1
   paidFromAccountId?: string | null;     // which account funded the payment
-  paidMonth?: string | null;             // "YYYY-MM" — used for monthly auto-reset
+  paidMonth?: string | null;             // "YYYY-MM" — period start; auto-reset after intervalMonths
 }
 
 // "YYYY-MM" key for the current calendar month.
@@ -68,7 +70,7 @@ export async function refreshDashboard(): Promise<DashboardData> {
       .order('position', { ascending: true }),
     supabase
       .from('costs')
-      .select('id, name, amount, paid, position, due_day, paid_from_account_id, paid_month')
+      .select('id, name, amount, paid, position, due_day, interval_months, due_month, paid_from_account_id, paid_month')
       .eq('user_id', uid)
       .order('position', { ascending: true }),
   ]);
@@ -89,6 +91,8 @@ export async function refreshDashboard(): Promise<DashboardData> {
       paid: r.paid,
       position: r.position,
       dueDay: r.due_day ?? 1,
+      intervalMonths: r.interval_months ?? 1,
+      dueMonth: r.due_month ?? null,
       paidFromAccountId: r.paid_from_account_id,
       paidMonth: r.paid_month,
     })),
@@ -111,6 +115,8 @@ export async function refreshDashboard(): Promise<DashboardData> {
           paid: c.paid,
           position: c.position,
           due_day: c.dueDay,
+          interval_months: c.intervalMonths ?? 1,
+          due_month: c.dueMonth ?? null,
           paid_from_account_id: c.paidFromAccountId ?? null,
           paid_month: c.paidMonth ?? null,
         }),
@@ -190,6 +196,8 @@ export async function saveCost(cost: Cost): Promise<void> {
       paid: cost.paid,
       position: cost.position,
       due_day: cost.dueDay,
+      interval_months: cost.intervalMonths ?? 1,
+      due_month: cost.dueMonth ?? null,
       paid_from_account_id: cost.paidFromAccountId ?? null,
       paid_month: cost.paidMonth ?? null,
     }),

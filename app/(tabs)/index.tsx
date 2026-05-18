@@ -197,7 +197,10 @@ export default function Dashboard() {
 
   // ── Math ──────────────────────────────────────────────────────────────────
   const totalLiquid = accounts.reduce((s, a) => s + parseAmt(a.amount), 0);
-  const unpaidCosts = costs.reduce((s, c) => (c.paid ? s : s + parseAmt(c.amount)), 0);
+  // Monthly costs only — periodic (quarterly/yearly) bills are kept out of the
+  // dashboard figure on purpose and live in Recurrings' separate section.
+  const monthlyCosts = costs.filter((c) => (c.intervalMonths ?? 1) === 1);
+  const unpaidCosts = monthlyCosts.reduce((s, c) => (c.paid ? s : s + parseAmt(c.amount)), 0);
   const afterPayments = totalLiquid - unpaidCosts;
   const symbol = CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency + ' ';
 
@@ -416,7 +419,7 @@ export default function Dashboard() {
               <View>
                 <Text style={s.cardTitle}>Monthly Costs</Text>
                 <Text style={s.cardSubtitle}>
-                  {fmt(unpaidCosts, symbol)} unpaid · {fmt(costs.reduce((sum, c) => sum + parseAmt(c.amount), 0), symbol)} total
+                  {fmt(unpaidCosts, symbol)} unpaid · {fmt(monthlyCosts.reduce((sum, c) => sum + parseAmt(c.amount), 0), symbol)} total
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#555" />

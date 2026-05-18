@@ -5,6 +5,9 @@ import {
   computeNetWorth,
   resetStaleCosts,
   goalMonthlyPace,
+  monthDiff,
+  nextOccurrence,
+  annualizedPeriodicTotal,
 } from './finance';
 
 describe('fv — future value of lump sum + monthly contributions', () => {
@@ -199,6 +202,92 @@ describe('resetStaleCosts — monthly un-pay of last month’s costs', () => {
   it('empty list yields empty result', () => {
     expect(resetStaleCosts([], '2026-05')).toEqual({ next: [], reset: [] });
   });
+});
+
+describe('monthDiff — whole months between two YYYY-MM keys', () => {
+  it('same month is 0', () => expect(monthDiff('2026-05', '2026-05')).toBe(0));
+  it('adjacent months is 1', () => expect(monthDiff('2026-04', '2026-05')).toBe(1));
+  it('crosses the year boundary', () => expect(monthDiff('2025-12', '2026-01')).toBe(1));
+  it('a full year is 12', () => expect(monthDiff('2025-06', '2026-06')).toBe(12));
+  it('is signed (negative when going backward)', () =>
+    expect(monthDiff('2026-05', '2026-02')).toBe(-3));
+});
+
+describe('resetStaleCosts — periodic intervals stay paid for their full term', () => {
+  const mk = (over: Partial<{ paid: boolean; paidMonth: string | null; intervalMonths: number }>) => ({
+    id: 'x', name: 'bill', amount: '100', paid: true, paidMonth: '2026-03' as string | null,
+    paidFromAccountId: null as string | null, ...over,
+  });
+
+  it('quarterly: untouched before 3 months elapse', () => {
+    const { reset } = resetStaleCosts([mk({ intervalMonths: 3, paidMonth: '2026-03' })], '2026-05');
+    expect(reset).toHaveLength(0); // only 2 months elapsed
+  });
+
+  it('quarterly: clears once 3 months elapse', () => {
+    const { reset, next } = resetStaleCosts([mk({ intervalMonths: 3, paidMonth: '2026-03' })], '2026-06');
+    expect(reset).toHaveLength(1);
+    expect(next[0].paid).toBe(false);
+  });
+
+  it('yearly: holds for 11 months, clears at 12', () => {
+    expect(resetStaleCosts([mk({ intervalMonths: 12, paidMonth: '2025-06' })], '2026-05').reset).toHaveLength(0);
+    expect(resetStaleCosts([mk({ intervalMonths: 12, paidMonth: '2025-06' })], '2026-06').reset).toHaveLength(1);
+  });
+
+  it('custom every-N falls back through the same rule', () => {
+    expect(resetStaleCosts([mk({ intervalMonths: 6, paidMonth: '2026-01' })], '2026-06').reset).toHaveLength(0);
+    expect(resetStaleCosts([mk({ intervalMonths: 6, paidMonth: '2026-01' })], '2026-07').reset).toHaveLength(1);
+  });
+
+  it('missing intervalMonths behaves as monthly (legacy rows)', () => {
+    const { reset } = resetStaleCosts([mk({ paidMonth: '2026-04' })], '2026-05');
+    expect(reset).toHaveLength(1);
+  });
+});
+
+describe('nextOccurrence — next calendar month a periodic bill lands on', () => {
+  const at = (y: number, m: number) => new Date(y, m - 1, 15); // m is 1-based
+
+  it('yearly anchored to March, asked in May → next March', () => {
+    expect(nextOccurrence(3, 12, at(2026, 5))).toEqual({ year: 2027, month: 3 });
+  });
+
+  it('yearly anchored to March, asked in February → this March', () => {
+    expect(nextOccurrence(3, 12, at(2026, 2))).toEqual({ year: 2026, month: 3 });
+  });
+
+  it('quarterly anchored to March recurs Mar/Jun/Sep/Dec', () => {
+    expect(nextOccurrence(3, 3, at(2026, 4))).toEqual({ year: 2026, month: 6 });
+    expect(nextOccurrence(3, 3, at(2026, 7))).toEqual({ year: 2026, month: 9 });
+    expect(nextOccurrence(3, 3, at(2026, 11))).toEqual({ year: 2026, month: 12 });
+  });
+
+  it('returns the current month when the bill is due this month', () => {
+    expect(nextOccurrence(6, 3, at(2026, 6))).toEqual({ year: 2026, month: 6 });
+  });
+
+  it('monthly (interval 1) is always the current month', () => {
+    expect(nextOccurrence(1, 1, at(2026, 8))).toEqual({ year: 2026, month: 8 });
+  });
+});
+
+describe('annualizedPeriodicTotal — yearly cost of non-monthly bills', () => {
+  it('yearly bill counts once', () =>
+    expect(annualizedPeriodicTotal([{ amount: '1200', intervalMonths: 12 }])).toBe(1200));
+  it('quarterly bill is x4', () =>
+    expect(annualizedPeriodicTotal([{ amount: '300', intervalMonths: 3 }])).toBe(1200));
+  it('every-6-months is x2', () =>
+    expect(annualizedPeriodicTotal([{ amount: '50', intervalMonths: 6 }])).toBe(100));
+  it('monthly and undefined intervals are excluded', () =>
+    expect(
+      annualizedPeriodicTotal([
+        { amount: '99', intervalMonths: 1 },
+        { amount: '99' },
+        { amount: '1200', intervalMonths: 12 },
+      ]),
+    ).toBe(1200));
+  it('empty list is 0', () => expect(annualizedPeriodicTotal([])).toBe(0));
 });
 
 describe('goalMonthlyPace — set-aside per month to hit a target', () => {

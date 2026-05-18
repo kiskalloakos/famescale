@@ -70,15 +70,27 @@ export function goalMonthlyPace(
   return remaining / Math.max(1, monthsLeft);
 }
 
-// Monthly cost auto-reset. A cost that was marked paid in a *previous* month
-// is un-paid for the new month (the past payment stays deducted — no refund).
-// Pure: returns the rebuilt list plus the subset that changed, so the caller
-// owns the side effects (persist + toast). Generic so the caller keeps its
-// full Cost type; only the fields this clears are constrained.
+// Whole months from one "YYYY-MM" key to another (signed; year-aware).
+// monthDiff('2025-12', '2026-01') === 1.
+export function monthDiff(from: string, to: string): number {
+  const [fy, fm] = from.split('-').map(Number);
+  const [ty, tm] = to.split('-').map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+}
+
+// Periodic-cost auto-reset. A cost stays paid for its full interval, then is
+// un-paid (the past payment stays deducted — no refund). Monthly costs
+// (intervalMonths 1 / undefined) clear the very next month — identical to the
+// old behavior, so legacy rows are unaffected. Quarterly (3) stays paid 3
+// months, yearly (12) for 12, custom "every N" for N. Pure: returns the
+// rebuilt list plus the subset that changed, so the caller owns the side
+// effects (persist + toast). Generic so the caller keeps its full Cost type;
+// only the fields this reads/clears are constrained.
 export interface ResettableCost {
   paid: boolean;
   paidFromAccountId?: string | null;
   paidMonth?: string | null;
+  intervalMonths?: number;
 }
 export function resetStaleCosts<T extends ResettableCost>(
   costs: T[],
@@ -86,12 +98,45 @@ export function resetStaleCosts<T extends ResettableCost>(
 ): { next: T[]; reset: T[] } {
   const reset: T[] = [];
   const next = costs.map((c) => {
-    if (c.paid && c.paidMonth && c.paidMonth !== currentMonth) {
-      const cleared = { ...c, paid: false, paidFromAccountId: null, paidMonth: null };
-      reset.push(cleared);
-      return cleared;
+    if (c.paid && c.paidMonth) {
+      const period = Math.max(1, c.intervalMonths ?? 1);
+      if (monthDiff(c.paidMonth, currentMonth) >= period) {
+        const cleared = { ...c, paid: false, paidFromAccountId: null, paidMonth: null };
+        reset.push(cleared);
+        return cleared;
+      }
     }
     return c;
   });
   return { next, reset };
+}
+
+// The next calendar month a periodic expense lands on, at or after `now`'s
+// month. `anchorMonth` is 1–12 (the due month the user set); occurrences are
+// anchor, anchor±interval, … so a quarterly bill anchored to March recurs
+// Mar/Jun/Sep/Dec. Monthly (interval 1) always returns the current month.
+export function nextOccurrence(
+  anchorMonth: number,
+  intervalMonths: number,
+  now: Date = new Date(),
+): { year: number; month: number } {
+  const k = Math.max(1, intervalMonths);
+  const curIdx = now.getFullYear() * 12 + now.getMonth(); // 0-based month index
+  let idx = now.getFullYear() * 12 + (anchorMonth - 1);
+  while (idx > curIdx) idx -= k;
+  while (idx < curIdx) idx += k;
+  return { year: Math.floor(idx / 12), month: (idx % 12) + 1 };
+}
+
+// What a set of non-monthly costs adds up to per year, for the Recurrings
+// "Periodic" headline. Monthly costs (interval 1 / undefined) are excluded —
+// they belong to the monthly figure, deliberately kept separate.
+export function annualizedPeriodicTotal(
+  costs: { amount: string; intervalMonths?: number }[],
+): number {
+  return costs.reduce((sum, c) => {
+    const k = Math.max(1, c.intervalMonths ?? 1);
+    if (k === 1) return sum;
+    return sum + (parseFloat(c.amount) || 0) * (12 / k);
+  }, 0);
 }
