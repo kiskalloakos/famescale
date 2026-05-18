@@ -27,6 +27,7 @@ const DEFAULT_SETUP: SetupData = {
   showGoals: false,
   includeDebtsInNetWorth: true,
   tabOrder: [...ORDERABLE_TABS],
+  trialStartedAt: null,
 };
 
 // Tab bar order. `always` tabs ignore setup; the rest mirror the old

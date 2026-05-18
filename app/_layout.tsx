@@ -23,6 +23,7 @@ import * as Linking from 'expo-linking';
 import OnboardingFlow from '../components/OnboardingFlow';
 import AuthScreen from '../components/AuthScreen';
 import SetNewPassword from '../components/SetNewPassword';
+import PaywallScreen from '../components/PaywallScreen';
 import ToastHost from '../components/ToastHost';
 import SyncIndicator from '../components/SyncIndicator';
 import { supabase } from '../lib/supabase';
@@ -34,8 +35,9 @@ import { getSavings } from '../lib/savings';
 import { getDebts } from '../lib/debts';
 import { getRevenue } from '../lib/revenue';
 import { getCurrencySettings } from '../lib/currency';
+import { resolveAccess } from '../lib/access';
 
-type Phase = 'loading' | 'signed-out' | 'recovery' | 'onboarding' | 'ready';
+type Phase = 'loading' | 'signed-out' | 'recovery' | 'onboarding' | 'paywall' | 'ready';
 
 // Pull a key=value out of "#a=1&b=2" or "?a=1&b=2"
 function readParam(key: string, raw: string): string | null {
@@ -99,7 +101,17 @@ export default function RootLayout() {
         getCurrencySettings(),
       ]);
       if (cancelled) return;
-      setPhase(setup?.completed ? 'ready' : 'onboarding');
+      if (!setup?.completed) {
+        setPhase('onboarding');
+        return;
+      }
+      // Paywall gate. resolveAccess() is a no-op (always allowed) until
+      // RevenueCat is configured, so this changes nothing in production
+      // until the keys/product are live. It also starts the 3-day
+      // account-tied trial clock on first authenticated launch.
+      const access = await resolveAccess(userId);
+      if (cancelled) return;
+      setPhase(access.allowed ? 'ready' : 'paywall');
     };
 
     // Exchange a recovery URL for a session. Used by both the web hash path
@@ -191,6 +203,15 @@ export default function RootLayout() {
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <StatusBar style="light" />
         <SetNewPassword />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (phase === 'paywall') {
+    return (
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <StatusBar style="light" />
+        <PaywallScreen onUnlocked={() => setPhase('ready')} />
       </SafeAreaProvider>
     );
   }
